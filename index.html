@@ -479,7 +479,6 @@ function computeBubble(raw, liqEng, creditEng, structEng){
   if(cg?.signal==='overheat')p+=14;
   else if(cg?.signal==='expansion')p+=6;
   p=Math.max(0,Math.min(100,Math.round(p)));
-  const cg=raw.copperGold;
   return {probability:p,signals:{spyUp,liqDrain:liqEng.trend==='Сжатие',creditWeak:creditEng.trend!=='Здоровый',narrowBreadth:structEng.details.breadth<45,megaCapLead:qqqLeads,rspLags,iwmLags,copperOverheat:cg?.signal==='overheat',copperRecession:cg?.signal==='recession'}}
 }
 
