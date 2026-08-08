@@ -339,7 +339,7 @@ function computeCopperGoldRatio(copper,gold,commod){
   if(!copper?.price||!gold?.price)return null;
   // Ratio = Copper Futures ($/lb) / Gold Futures ($/oz) * 1000 для читаемости
   // HG=F ~ $4.5/lb, GC=F ~ $2400/oz → ratio ~ 1.875
-  const ratio=Math.round((copper.price/gold.price)*10000)/10000;
+  const ratio=Math.round((copper.price/gold.price)*1000*100)/100;
   const copperChg=copper.chg3m??0;
   const goldChg=commod?.goldRet??0;
   const gap=copperChg-goldChg;
