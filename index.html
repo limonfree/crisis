@@ -435,7 +435,6 @@ function engFlow(raw){
   riskOff=Math.max(0,Math.min(100,Math.round(riskOff)));
   let trend='Нейтрально'; if(riskOff>=60)trend='Risk-off'; else if(riskOff<=35)trend='Risk-on';
   let vote='neutral'; if(riskOff>=70)vote='crash'; else if(riskOff>=50)vote='bearish'; else if(riskOff<=30)vote='bullish';
-  const cg=raw.copperGold;
   return {score:riskOff,trend,vote,accel:0,details:{usdjpy:fx.usdjpy,jpyChg:fx.usdjpy_chg,dxy:fx.dxy,dxyChg:fx.dxy_chg,funding:crypto.fundingRate,stableChg:crypto.stableChg7d,goldRet:com.goldRet,spyRet:com.spyRet,oilRet:com.oilRet,copperChg:copper?.chg3m,cgRatio:cg?.ratio,cgSignal:cg?.signal,cgGap:cg?.gap}}
 }
 
