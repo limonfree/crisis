@@ -88,7 +88,10 @@
   <span class="ts mono" id="headerTs">—</span>
 </header>
 <main>
-  <div class="stale-warn" id="staleWarn">⚠ Согласованность снижена: устаревшие или кэшированные данные.</div>
+  <div class="stale-warn" id="staleWarn">
+    <div>⚠ Согласованность снижена: устаревшие или кэшированные данные.</div>
+    <ul id="staleList" style="margin:6px 0 0;padding-left:16px;list-style:disc"></ul>
+  </div>
   <div class="stale-warn" id="noDataWarn" style="background:#fbe6e8;border-color:var(--red);color:var(--red)">⚠ Недостаточно данных для оценки. Индекс не рассчитан.</div>
 
   <!-- HERO -->
@@ -769,6 +772,29 @@ function ageMinutes(ts){if(ts==null)return Infinity;const t=typeof ts==='number'
 function formatAge(m){if(!isFinite(m))return 'н/д';if(m<1)return Math.round(m*60)+'s';if(m<60)return Math.round(m)+'m';if(m<1440)return Math.round(m/60)+'h';const d=Math.round(m/1440);return d===1?'1d':d+'d'}
 function freshStatus(type,last){const lim=FRESH_LIMITS[type]||FRESH_LIMITS.Daily;const age=ageMinutes(last);if(age<=lim.ok)return {level:'ok',dot:'🟢'};if(age<=lim.warn)return {level:'warn',dot:'🟡'};return {level:'stale',dot:'🔴'}}
 
+const INDICATOR_NAMES={
+  vix:'VIX', move:'MOVE', liq:'Net Liquidity (Fed)', hy:'HY OAS', breadth:'Ширина рынка (52-нед. хай/лои)',
+  fx:'USD/JPY', crypto:'Крипто (funding/stable/ETH-BTC)', kre:'KRE (регион. банки)', m2:'M2',
+  ccc:'CCC OAS', bbb:'BBB OAS', cbGlobal:'ECB/BOJ балансы', pcr:'Put/Call ratio', vixterm:'VIX term structure',
+  macroExtra:'Макро (permits/durables/temp help)', narrow:'Узость рынка (RSP/IWM)', copper:'Медь (Dr. Copper)', goldSpot:'Золото (спот)'
+};
+function formatDateTime(ts){if(ts==null)return 'н/д';const t=typeof ts==='number'?ts:new Date(ts).getTime();if(isNaN(t))return 'н/д';return new Date(t).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
+function buildStaleList(meta){
+  const out=[];
+  Object.keys(INDICATOR_NAMES).forEach(k=>{
+    const m=meta[k];
+    const name=INDICATOR_NAMES[k];
+    if(!m){ out.push({name,reason:'нет данных',date:null}); return; }
+    if(!m.lastUpdate){ out.push({name,reason:m.fromCache?'кэш, дата н/д':'дата н/д',date:null}); return; }
+    const st=freshStatus(m.updateType||'Daily', m.lastUpdate);
+    if(m.fromCache || st.level!=='ok'){
+      const reason=m.fromCache && st.level==='stale' ? 'кэш · устарело' : m.fromCache ? 'кэш' : 'устарело';
+      out.push({name,reason,date:formatDateTime(m.lastUpdate)});
+    }
+  });
+  return out;
+}
+
 function calculateConfidence(raw, engines, crisis){
   // «Согласованность» ≠ accuracy. Только agreement × покрытие × freshness.
   // Кэшированные (fromCache) поля штрафуются по своему lastUpdate так же, как свежие.
@@ -915,7 +941,19 @@ function render(result, raw, ts, source){
   document.getElementById('headerTs').textContent=ts?new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
 
   const warn=document.getElementById('staleWarn');
-  if(conf.staleWarn){warn.classList.add('show');warn.textContent='⚠ Согласованность снижена: устаревшие или кэшированные данные.'}else warn.classList.remove('show');
+  const staleListEl=document.getElementById('staleList');
+  if(conf.staleWarn){
+    warn.classList.add('show');
+    const items=buildStaleList(meta);
+    if(staleListEl){
+      staleListEl.innerHTML = items.length
+        ? items.map(it=>`<li>${it.name}: ${it.reason}${it.date?' · посл. актуальные — '+it.date:''}</li>`).join('')
+        : '<li>детали недоступны</li>';
+    }
+  } else {
+    warn.classList.remove('show');
+    if(staleListEl) staleListEl.innerHTML='';
+  }
 
 const voteHtml=v=>{
     const cls=v==='crash'?'vote-crash':v==='bearish'?'vote-bearish':v==='bullish'?'vote-bullish':'vote-neutral';
@@ -1141,6 +1179,8 @@ function renderInsufficientData(reason){
   const warn=document.getElementById('noDataWarn');
   if(warn){ warn.classList.add('show'); warn.textContent='⚠ Недостаточно данных для оценки. Индекс стресса не рассчитан.'; }
   document.getElementById('staleWarn').classList.remove('show');
+  const staleListElReset=document.getElementById('staleList');
+  if(staleListElReset) staleListElReset.innerHTML='';
   document.getElementById('headerTs').textContent='нет данных';
   ['crisisDetails','oppDetails','liqDetails','creditDetails','structureDetails','flowDetails','macroDetails','regimeDetails','bubbleDetails','confDetails'].forEach(id=>{
     const el=document.getElementById(id);
