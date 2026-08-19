@@ -51,10 +51,12 @@
   .panel{display:none;background:var(--bg-card);border:1px solid var(--line);border-radius:0;padding:14px;margin-bottom:12px;box-shadow:none}
   .panel.open{display:block}
   .panel h3{margin:0 0 10px;font-size:13px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.5px}
-  .ind-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:12px}
-  .ind-row:last-child{border-bottom:none}
+  .ind-row{display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0 2px;border-bottom:none;font-size:12px;gap:10px}
+  .ind-row + .ind-hint{border-bottom:1px solid var(--line-soft);padding-bottom:6px;margin-bottom:0}
   .ind-name{color:var(--text)}
-  .ind-val{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim)}
+  .ind-val{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim);white-space:nowrap;flex-shrink:0}
+  .ind-sub{display:block;font-size:9.5px;color:var(--dim);font-weight:400;margin-top:1px;line-height:1.3}
+  .ind-hint{font-size:10.5px;line-height:1.35;padding-bottom:6px;border-bottom:1px solid var(--line-soft)}
   .vote-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:0;border:1px solid currentColor}
   .vote-bullish{background:var(--text);color:#ffffff;border-color:var(--text)}
   .vote-neutral{background:transparent;color:var(--dim);border-color:var(--line-soft)}
@@ -88,10 +90,7 @@
   <span class="ts mono" id="headerTs">—</span>
 </header>
 <main>
-  <div class="stale-warn" id="staleWarn">
-    <div>⚠ Согласованность снижена: устаревшие или кэшированные данные.</div>
-    <ul id="staleList" style="margin:6px 0 0;padding-left:16px;list-style:disc"></ul>
-  </div>
+  <div class="stale-warn" id="staleWarn">⚠ Согласованность снижена: устаревшие или кэшированные данные.</div>
   <div class="stale-warn" id="noDataWarn" style="background:#fbe6e8;border-color:var(--red);color:var(--red)">⚠ Недостаточно данных для оценки. Индекс не рассчитан.</div>
 
   <!-- HERO -->
@@ -571,7 +570,7 @@ function engMacro(raw){
   let trend='Расширение'; if(score<=35)trend='Рецессия'; else if(score<=55)trend='Замедление';
   let vote='bullish'; if(score<=30)vote='crash'; else if(score<=50)vote='bearish'; else if(score<=65)vote='neutral';
   const cg=raw.copperGold;
-  return {score,trend,vote,accel:0,details:{claims:m.claims,claimsChg:m.claimsChg,housing:m.housing,housingChg:m.housingChg,baltic:baltic?.price,permitChg:ex.permitChg,durableChg:ex.durableChg,tempChg3m:ex.tempChg3m,cgRatio:cg?.ratio,cgSignal:cg?.signal,copperChg:cg?.copperChg,goldChg:cg?.goldChg}}
+  return {score,trend,vote,accel:0,details:{claims:m.claims,claimsChg:m.claimsChg,housing:m.housing,housingChg:m.housingChg,baltic:baltic?.price,balticChg:baltic?.chg,permitChg:ex.permitChg,durableChg:ex.durableChg,tempChg3m:ex.tempChg3m,cgRatio:cg?.ratio,cgSignal:cg?.signal,copperChg:cg?.copperChg,goldChg:cg?.goldChg}}
 }
 
 function computeBubble(raw, liqEng, creditEng, structEng){
@@ -766,34 +765,59 @@ function detectRegime(engines, crisisP, bubbleP, oppP, signalType){
 function confColor(c){if(c<30)return '#6b6b6b';if(c<60)return '#999999';if(c<80)return '#767676';return '#111111'}
 function crisisColor(p){if(p<25)return '#111111';if(p<45)return '#999999';if(p<65)return '#444444';return '#e2001a'}
 
+/* ---------- Человеко-понятные пояснения (plain language) ---------- */
+function h(text,tone){ // tone: good | neutral | warn | bad
+  const col=tone==='good'?'var(--text)':tone==='bad'?'var(--red)':tone==='warn'?'var(--orange)':'var(--dim)';
+  return `<div class="ind-hint" style="color:${col}">${text}</div>`;
+}
+const hNA=h('Нет данных','neutral');
+
+// --- Ликвидность ---
+function hNetLiq(v){if(v==null)return hNA;if(v<5.2)return h('Свободных денег в системе мало — рынкам тяжело расти','bad');if(v<5.6)return h('Ниже нормы — умеренное давление на активы','warn');if(v<6.0)return h('Чуть ниже среднего, не критично','neutral');if(v>6.5)return h('Денег в системе много — это подпирает цены активов','good');return h('В пределах нормы','neutral')}
+function hChg4w(v){if(v==null)return hNA;if(v<=-200)return h('Резкое изъятие денег из системы за месяц — тревожный сигнал','bad');if(v<=-100)return h('Заметное сжатие ликвидности','warn');if(v<=-40)return h('Небольшое сжатие','neutral');if(v>=100)return h('Быстрый приток денег в систему — поддержка для рынков','good');if(v>=40)return h('Умеренный приток','neutral');return h('Без выраженного тренда','neutral')}
+function hM2(v){if(v==null)return hNA;if(v<-1)return h('Денежная масса сокращается — редкий и настораживающий случай','bad');if(v<0)return h('Небольшое сокращение денежной массы','warn');if(v>2)return h('Быстрый рост денежной массы в экономике','good');return h('Рост в норме','neutral')}
+function hCB(v,name){if(v==null)return hNA;if(v<=-3)return h(`${name} заметно сокращает баланс — деньги уходят из системы`,'bad');if(v<=-1)return h(`${name} немного сжимается`,'warn');if(v>=3)return h(`${name} расширяет баланс — добавляет ликвидности в мир`,'good');return h(`${name} почти не меняется`,'neutral')}
+
+// --- Кредит ---
+function hHY(v){if(v==null)return hNA;if(v>=7)return h('Инвесторы требуют большую премию за риск — рынок закладывает серьёзные проблемы у слабых компаний','bad');if(v>=5)return h('Спреды расширены — растущая осторожность к рискованному долгу','warn');if(v>=3.5)return h('Слегка выше спокойного уровня','neutral');if(v<2.8)return h('Спреды у многолетних минимумов — кредитный рынок спокоен','good');return h('В норме','neutral')}
+function hChg5(v,noun){if(v==null)return hNA;if(v>=0.25)return h(`${noun} резко расширяются за неделю — быстрый рост опасений`,'bad');if(v>=0.1)return h(`${noun} заметно расширяются`,'warn');return h('Без резких движений','neutral')}
+function hCCC(v){if(v==null)return hNA;if(v>=13)return h('Самый слабый эшелон junk-бондов уже трещит — ранний сигнал стресса','bad');if(v>=10)return h('Заметное напряжение в нижнем сегменте мусорных облигаций','warn');if(v>=8)return h('Небольшое напряжение','neutral');if(v<6.5)return h('Нижний эшелон спокоен','good');return h('В норме','neutral')}
+function hBBB(v){if(v==null)return hNA;if(v>=2.6)return h('Даже качественные компании занимают дороже обычного','warn');if(v>=2.0)return h('Немного выше спокойного уровня','neutral');return h('Инвестиционный грейд спокоен','good')}
+function hDelinq(v,th,noun){if(v==null)return hNA;if(v>th)return h(`Просрочки по ${noun} растут выше нормы`,'warn');return h('В пределах нормы','neutral')}
+function hSloos(v){if(v==null)return hNA;if(v>20)return h('Банки резко ужесточают выдачу кредитов — кредит становится труднодоступен','bad');if(v>10)return h('Банки умеренно ужесточают условия','warn');return h('Банки не ужесточают условия','good')}
+function hKRE(v){if(v==null)return hNA;if(v<-15)return h('Региональные банки резко падают — признак стресса в банковском секторе','bad');if(v<-8)return h('Заметная слабость региональных банков','warn');return h('Без выраженной слабости','neutral')}
+
+// --- Структура рынка ---
+function hVix(v){if(v==null)return hNA;if(v>=35)return h('Рынок акций в панике','bad');if(v>=25)return h('Повышенный страх на рынке акций','warn');if(v>=20)return h('Лёгкая нервозность','neutral');if(v<15)return h('Рынок спокоен, страха мало','good');return h('В норме','neutral')}
+function hMove(v){if(v==null)return hNA;if(v>=130)return h('Рынок облигаций штормит — сильная неопределённость по ставкам','bad');if(v>=100)return h('Повышенная нервозность вокруг ставок','warn');if(v<80)return h('Рынок облигаций спокоен','good');return h('В норме','neutral')}
+function hVvix(v){if(v==null)return hNA;if(v>=120)return h('Растёт неопределённость по поводу самой волатильности — редкий стресс-сигнал','warn');return h('В норме','neutral')}
+function hBreadth(v){if(v==null)return hNA;if(v<=20)return h('Почти никто не растёт — очень узкий, нездоровый рынок','bad');if(v<=40)return h('Растёт меньшинство акций — участие слабое','warn');if(v>=70)return h('Растёт большинство акций — здоровое, широкое ралли','good');return h('Умеренное участие','neutral')}
+function hVterm(v){if(v==null)return hNA;if(v>=1.05)return h('Рынок опционов закладывает шок в ближайшие недели','bad');if(v>=1.0)return h('Лёгкое напряжение в ближних опционах','warn');if(v<0.85)return h('Нормальная спокойная структура','good');return h('В норме','neutral')}
+function hPCR(v){if(v==null)return hNA;if(v>=1.3)return h('Трейдеры массово покупают защиту от падения — высокий страх','bad');if(v>=1.1)return h('Повышенный спрос на защиту от падения','warn');if(v<=0.7)return h('Мало хеджей — рынок расслаблен','good');return h('В норме','neutral')}
+function hHL(v){if(v==null)return hNA;if(v<=-20)return h('Акций у годовых минимумов заметно больше, чем у максимумов','bad');if(v<=-8)return h('Минимумов чуть больше, чем максимумов','warn');if(v>=20)return h('Максимумов заметно больше минимумов — сильный рынок','good');return h('Сбалансировано','neutral')}
+function hRspGap(v){if(v==null)return hNA;if(v>=6)return h('Рынок держится на нескольких гигантах, остальные акции отстают','warn');if(v>=3)return h('Небольшой перекос в сторону мегакэпов','neutral');return h('Рост распределён широко, не только в лидерах','good')}
+
+// --- Потоки капитала ---
+function hUsdJpy(v){if(v==null)return hNA;if(v>=160)return h('Йена очень слаба — риск резкого разворота керри-трейда','warn');return h('В спокойной зоне','neutral')}
+function hDxy(v){if(v==null)return hNA;if(v>=105)return h('Доллар силён — это давит на всё остальное (сырьё, EM, риск-активы)','warn');return h('В спокойной зоне','neutral')}
+function hFunding(v){if(v==null)return hNA;const pct=v*100;if(v>0.02)return h('Фандинг повышен — рынок фьючерсов перегрет лонгами','warn');if(v<-0.005)return h('Отрицательный фандинг — перекос в шорты','warn');return h('В норме','neutral')}
+function hStable(v){if(v==null)return hNA;if(v<=-2)return h('Деньги уходят из стейблкоинов — отток ликвидности из крипты','warn');if(v>=3)return h('Приток денег в стейблкоины — свежая ликвидность заходит в крипту','good');return h('Без выраженного тренда','neutral')}
+function hOil(v){if(v==null)return hNA;if(v<=-20)return h('Резкий обвал нефти обычно означает, что рынок закладывает слабый спрос/рецессию','warn');if(v>=25)return h('Резкий взлёт нефти — риск инфляционного шока','warn');return h('В спокойной зоне','neutral')}
+function hCopperGold(sig){if(!sig)return hNA;if(sig==='overheat')return h('Медь опережает золото — признак позднего цикла/перегрева, обычно за 3–9 мес. до кредитного стресса','warn');if(sig==='recession')return h('Медь резко отстаёт от золота — рынок закладывает слабый рост','bad');if(sig==='expansion')return h('Медь растёт вместе со здоровым спросом — нормальное расширение','good');return h('Нейтральное соотношение','neutral')}
+
+// --- Макро ---
+function hClaims(v){if(v==null)return hNA;if(v>30000)return h('Резкий скачок увольнений — рынок труда быстро слабеет','bad');if(v>10000)return h('Заметный рост увольнений','warn');if(v<-15000)return h('Увольнений заметно меньше — рынок труда крепкий','good');return h('Без выраженного тренда','neutral')}
+function hHousingChg(v){if(v==null)return hNA;if(v<-0.1)return h('Стройка резко тормозит — ранний признак охлаждения экономики','bad');if(v>0.05)return h('Стройка ускоряется — экономика чувствует себя уверенно','good');return h('Без выраженного тренда','neutral')}
+function hBaltic(v){if(v==null)return hNA;if(v<-20)return h('Мировые морские грузоперевозки резко упали — слабый спрос в глобальной торговле','bad');if(v>15)return h('Грузоперевозки растут — торговля оживляется','good');return h('Без выраженного тренда','neutral')}
+function hPermit(v){if(v==null)return hNA;if(v<-8)return h('Разрешений на строительство стало заметно меньше — опережающий сигнал слабости жилья','bad');if(v<-3)return h('Небольшое снижение','warn');if(v>5)return h('Заметный рост разрешений — стройка будет расти','good');return h('Без выраженного тренда','neutral')}
+function hDurable(v){if(v==null)return hNA;if(v<-4)return h('Заказы на товары длительного пользования резко упали — бизнес меньше инвестирует','bad');if(v<-1.5)return h('Заметное снижение заказов','warn');if(v>3)return h('Заказы растут — бизнес уверенно инвестирует','good');return h('Без выраженного тренда','neutral')}
+function hTempHelp(v){if(v==null)return hNA;if(v<-3)return h('Временная занятость резко падает — классический ранний признак разворота рынка труда','bad');if(v<-1)return h('Временная занятость снижается','warn');if(v>1)return h('Временная занятость растёт — рынок труда крепкий','good');return h('Без выраженного тренда','neutral')}
+
 /* ---------- Freshness / Confidence ---------- */
 const FRESH_LIMITS={Live:{ok:15,warn:60},Intraday:{ok:60,warn:360},Daily:{ok:1440,warn:2880},Weekly:{ok:10080,warn:20160},Quarterly:{ok:129600,warn:200000}};
 function ageMinutes(ts){if(ts==null)return Infinity;const t=typeof ts==='number'?ts:new Date(ts).getTime();return isNaN(t)?Infinity:(Date.now()-t)/60000}
 function formatAge(m){if(!isFinite(m))return 'н/д';if(m<1)return Math.round(m*60)+'s';if(m<60)return Math.round(m)+'m';if(m<1440)return Math.round(m/60)+'h';const d=Math.round(m/1440);return d===1?'1d':d+'d'}
 function freshStatus(type,last){const lim=FRESH_LIMITS[type]||FRESH_LIMITS.Daily;const age=ageMinutes(last);if(age<=lim.ok)return {level:'ok',dot:'🟢'};if(age<=lim.warn)return {level:'warn',dot:'🟡'};return {level:'stale',dot:'🔴'}}
-
-const INDICATOR_NAMES={
-  vix:'VIX', move:'MOVE', liq:'Net Liquidity (Fed)', hy:'HY OAS', breadth:'Ширина рынка (52-нед. хай/лои)',
-  fx:'USD/JPY', crypto:'Крипто (funding/stable/ETH-BTC)', kre:'KRE (регион. банки)', m2:'M2',
-  ccc:'CCC OAS', bbb:'BBB OAS', cbGlobal:'ECB/BOJ балансы', pcr:'Put/Call ratio', vixterm:'VIX term structure',
-  macroExtra:'Макро (permits/durables/temp help)', narrow:'Узость рынка (RSP/IWM)', copper:'Медь (Dr. Copper)', goldSpot:'Золото (спот)'
-};
-function formatDateTime(ts){if(ts==null)return 'н/д';const t=typeof ts==='number'?ts:new Date(ts).getTime();if(isNaN(t))return 'н/д';return new Date(t).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
-function buildStaleList(meta){
-  const out=[];
-  Object.keys(INDICATOR_NAMES).forEach(k=>{
-    const m=meta[k];
-    const name=INDICATOR_NAMES[k];
-    if(!m){ out.push({name,reason:'нет данных',date:null}); return; }
-    if(!m.lastUpdate){ out.push({name,reason:m.fromCache?'кэш, дата н/д':'дата н/д',date:null}); return; }
-    const st=freshStatus(m.updateType||'Daily', m.lastUpdate);
-    if(m.fromCache || st.level!=='ok'){
-      const reason=m.fromCache && st.level==='stale' ? 'кэш · устарело' : m.fromCache ? 'кэш' : 'устарело';
-      out.push({name,reason,date:formatDateTime(m.lastUpdate)});
-    }
-  });
-  return out;
-}
 
 function calculateConfidence(raw, engines, crisis){
   // «Согласованность» ≠ accuracy. Только agreement × покрытие × freshness.
@@ -941,19 +965,7 @@ function render(result, raw, ts, source){
   document.getElementById('headerTs').textContent=ts?new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
 
   const warn=document.getElementById('staleWarn');
-  const staleListEl=document.getElementById('staleList');
-  if(conf.staleWarn){
-    warn.classList.add('show');
-    const items=buildStaleList(meta);
-    if(staleListEl){
-      staleListEl.innerHTML = items.length
-        ? items.map(it=>`<li>${it.name}: ${it.reason}${it.date?' · посл. актуальные — '+it.date:''}</li>`).join('')
-        : '<li>детали недоступны</li>';
-    }
-  } else {
-    warn.classList.remove('show');
-    if(staleListEl) staleListEl.innerHTML='';
-  }
+  if(conf.staleWarn){warn.classList.add('show');warn.textContent='⚠ Согласованность снижена: устаревшие или кэшированные данные.'}else warn.classList.remove('show');
 
 const voteHtml=v=>{
     const cls=v==='crash'?'vote-crash':v==='bearish'?'vote-bearish':v==='bullish'?'vote-bullish':'vote-neutral';
@@ -968,16 +980,16 @@ const voteHtml=v=>{
       <span style="color:var(--dim);font-size:11px">${action.note||''}</span>
     </div>`:''}
     <div style="margin-top:12px">
-      <div class="ind-row"><span>Согласованность</span><span class="ind-val">${crisis.agreement}% (${crisis.majorityCount}/${crisis.total})</span></div>
-      <div class="ind-row"><span>Большинство голосов</span>${voteHtml(crisis.majority)}</div>
-      <div class="ind-row"><span>Ликвидность · стресс</span>${voteHtml(crisis.votes.liquidity)} <span class="ind-val">${st.liq??'—'}</span></div>
-      <div class="ind-row"><span>Кредит · стресс</span>${voteHtml(crisis.votes.credit)} <span class="ind-val">${st.credit??'—'}</span></div>
-      <div class="ind-row"><span>Структура · стресс</span>${voteHtml(crisis.votes.structure)} <span class="ind-val">${st.struct??'—'}</span></div>
-      <div class="ind-row"><span>Потоки · стресс</span>${voteHtml(crisis.votes.flow)} <span class="ind-val">${st.flow??'—'}</span></div>
-      <div class="ind-row"><span>Макро · стресс</span>${voteHtml(crisis.votes.macro)} <span class="ind-val">${st.macro??'—'}</span></div>
-      <div class="ind-row"><span>Ускорение (сырое / учтено)</span><span class="ind-val">${crisis.accelBoost} / ${crisis.accelApplied??crisis.accelBoost}</span></div>
-      <div class="ind-row"><span>Системный допуск</span><span class="ind-val">${crisis.systemicEligible?'да':'нет (нужен кредит + структура/ликв.)'}</span></div>
-      ${crisis.structuralOnlyShock?`<div class="ind-row"><span>Фильтр FP</span><span class="ind-val" style="color:#444444">шок без кредита → потолок ~72%</span></div>`:''}
+      <div class="ind-row"><span>Согласованность движков<br><span class="ind-sub">сколько из 5 движков голосуют одинаково</span></span><span class="ind-val">${crisis.agreement}% (${crisis.majorityCount}/${crisis.total})</span></div>
+      <div class="ind-row"><span>Итоговый голос большинства</span>${voteHtml(crisis.majority)}</div>
+      <div class="ind-row"><span>Ликвидность · стресс 0–100<br><span class="ind-sub">вес в итоговом индексе: 35%</span></span>${voteHtml(crisis.votes.liquidity)} <span class="ind-val">${st.liq??'—'}</span></div>
+      <div class="ind-row"><span>Кредит · стресс 0–100<br><span class="ind-sub">вес: 25%</span></span>${voteHtml(crisis.votes.credit)} <span class="ind-val">${st.credit??'—'}</span></div>
+      <div class="ind-row"><span>Структура · стресс 0–100<br><span class="ind-sub">вес: 15%</span></span>${voteHtml(crisis.votes.structure)} <span class="ind-val">${st.struct??'—'}</span></div>
+      <div class="ind-row"><span>Потоки · стресс 0–100<br><span class="ind-sub">вес: 15%</span></span>${voteHtml(crisis.votes.flow)} <span class="ind-val">${st.flow??'—'}</span></div>
+      <div class="ind-row"><span>Макро · стресс 0–100<br><span class="ind-sub">вес: 10%</span></span>${voteHtml(crisis.votes.macro)} <span class="ind-val">${st.macro??'—'}</span></div>
+      <div class="ind-row"><span>Ускорение<br><span class="ind-sub">насколько быстро ухудшаются показатели — резкий рывок опаснее плавного дрейфа</span></span><span class="ind-val">${crisis.accelBoost} / ${crisis.accelApplied??crisis.accelBoost}</span></div>
+      <div class="ind-row"><span>Допуск до «системного» уровня<br><span class="ind-sub">индекс не может показать «системный крах», пока не подтверждён кредит + (структура или ликвидность)</span></span><span class="ind-val">${crisis.systemicEligible?'открыт':'закрыт'}</span></div>
+      ${crisis.structuralOnlyShock?`<div class="ind-row"><span>Защита от ложной тревоги<br><span class="ind-sub">рынок трясёт, но кредит и ликвидность в норме — это разовый шок, а не системный кризис, поэтому индекс искусственно не поднимается выше ~72</span></span><span class="ind-val" style="color:var(--orange)">потолок 72</span></div>`:''}
     </div>
     <div style="margin-top:12px;font-size:10.5px;color:var(--dim);line-height:1.5">
       <b>Это не вероятность.</b> Score — взвешенная сумма эвристик (ликвидность/кредит/структура/потоки/макро). Нет калибровки по частотам событий.
@@ -996,15 +1008,16 @@ const voteHtml=v=>{
     <div class="engine-label">${engines.liquidity.trend} · голос: ${voteRu[engines.liquidity.vote]||engines.liquidity.vote}</div>
     ${engines.liquidity.accel?`<div class="accel-badge">Ускорение</div>`:''}
     <div style="margin-top:10px">
-      <div class="ind-row"><span>Чистая ликвидность</span><span class="ind-val">${ld.netLiq!=null?'$'+ld.netLiq.toFixed(2)+'T':'—'}</span></div>
-      <div class="ind-row"><span>Δ за 4 нед.</span><span class="ind-val">${ld.chg4w!=null?(ld.chg4w>0?'+':'')+ld.chg4w+' млрд':'—'}</span></div>
-      <div class="ind-row"><span>Баланс ФРС (WALCL)</span><span class="ind-val">${ld.walcl!=null?ld.walcl.toFixed(2)+'T':'—'}</span></div>
-      <div class="ind-row"><span>TGA (казначейство)</span><span class="ind-val">${ld.tga!=null?ld.tga.toFixed(2)+'T':'—'}</span></div>
-      <div class="ind-row"><span>Обратное репо (RRP)</span><span class="ind-val">${ld.rrp!=null?Math.round(ld.rrp)+' млрд':'—'}</span></div>
-      <div class="ind-row"><span>M2, изм. за 3 мес.</span><span class="ind-val">${ld.m2Chg!=null?ld.m2Chg+'%':'—'}</span></div>
-      <div class="ind-row"><span>ECB баланс, Δ4нед</span><span class="ind-val">${ld.ecbChg!=null?(ld.ecbChg>0?'+':'')+ld.ecbChg+'%':'—'}</span></div>
-      <div class="ind-row"><span>BOJ баланс, Δ4нед</span><span class="ind-val">${ld.bojChg!=null?(ld.bojChg>0?'+':'')+ld.bojChg+'%':'—'}</span></div>
-    </div>`;
+      <div class="ind-row"><span>Чистая ликвидность<br><span class="ind-sub">сколько свободных денег в финансовой системе</span></span><span class="ind-val">${ld.netLiq!=null?'$'+ld.netLiq.toFixed(2)+'T':'—'}</span></div>${hNetLiq(ld.netLiq)}
+      <div class="ind-row"><span>Δ за 4 нед.<br><span class="ind-sub">приток/отток денег за последний месяц</span></span><span class="ind-val">${ld.chg4w!=null?(ld.chg4w>0?'+':'')+ld.chg4w+' млрд':'—'}</span></div>${hChg4w(ld.chg4w)}
+      <div class="ind-row"><span>Баланс ФРС (WALCL)<br><span class="ind-sub">активы на балансе Центробанка США</span></span><span class="ind-val">${ld.walcl!=null?ld.walcl.toFixed(2)+'T':'—'}</span></div>
+      <div class="ind-row"><span>TGA (казначейство)<br><span class="ind-sub">кэш правительства США — рост TGA изымает деньги из рынков</span></span><span class="ind-val">${ld.tga!=null?ld.tga.toFixed(2)+'T':'—'}</span></div>
+      <div class="ind-row"><span>Обратное репо (RRP)<br><span class="ind-sub">деньги, «припаркованные» в ФРС и временно выведенные из оборота</span></span><span class="ind-val">${ld.rrp!=null?Math.round(ld.rrp)+' млрд':'—'}</span></div>
+      <div class="ind-row"><span>M2, изм. за 3 мес.<br><span class="ind-sub">рост общей денежной массы в экономике</span></span><span class="ind-val">${ld.m2Chg!=null?ld.m2Chg+'%':'—'}</span></div>${hM2(ld.m2Chg)}
+      <div class="ind-row"><span>ECB баланс, Δ4нед<br><span class="ind-sub">то же самое, но у Центробанка Европы</span></span><span class="ind-val">${ld.ecbChg!=null?(ld.ecbChg>0?'+':'')+ld.ecbChg+'%':'—'}</span></div>${hCB(ld.ecbChg,'ЕЦБ')}
+      <div class="ind-row"><span>BOJ баланс, Δ4нед<br><span class="ind-sub">то же самое, но у Центробанка Японии</span></span><span class="ind-val">${ld.bojChg!=null?(ld.bojChg>0?'+':'')+ld.bojChg+'%':'—'}</span></div>${hCB(ld.bojChg,'Банк Японии')}
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «много ли свободных денег крутится в финансовой системе прямо сейчас». Больше денег → рынкам легче расти. Деньги уходят → рынкам становится тяжелее.</div>`;
 
   const cd=engines.credit.details;
   document.getElementById('creditDetails').innerHTML=`
@@ -1012,61 +1025,67 @@ const voteHtml=v=>{
     <div class="engine-label">${engines.credit.trend} · голос: ${voteRu[engines.credit.vote]||engines.credit.vote}</div>
     ${engines.credit.accel?`<div class="accel-badge">Ускорение</div>`:''}
     <div style="margin-top:10px">
-      <div class="ind-row"><span>HY OAS (спреды)</span><span class="ind-val">${cd.hy!=null?cd.hy+'%':'—'}</span></div>
-      <div class="ind-row"><span>HY Δ 5д</span><span class="ind-val">${cd.hyChg!=null?cd.hyChg:'—'}</span></div>
-      <div class="ind-row"><span>CCC OAS (дно junk)</span><span class="ind-val">${cd.ccc!=null?cd.ccc+'%':'—'}${cd.cccChg!=null?' ('+cd.cccChg+')':''}</span></div>
-      <div class="ind-row"><span>BBB OAS (инвест-грейд)</span><span class="ind-val">${cd.bbb!=null?cd.bbb+'%':'—'}</span></div>
-      <div class="ind-row"><span>Просрочки CRE</span><span class="ind-val">${cd.cre!=null?cd.cre+'%':'—'}</span></div>
-      <div class="ind-row"><span>Просрочки ипотеки</span><span class="ind-val">${cd.mort!=null?cd.mort+'%':'—'}</span></div>
-      <div class="ind-row"><span>Ужесточение кредитов (SLOOS)</span><span class="ind-val">${cd.sloos!=null?cd.sloos:'—'}</span></div>
-      <div class="ind-row"><span>KRE за 3 мес.</span><span class="ind-val">${cd.kreChg!=null?cd.kreChg+'%':'—'}</span></div>
-    </div>`;
+      <div class="ind-row"><span>HY OAS (спреды)<br><span class="ind-sub">переплата за риск для «мусорных» облигаций сверх гособлигаций</span></span><span class="ind-val">${cd.hy!=null?cd.hy+'%':'—'}</span></div>${hHY(cd.hy)}
+      <div class="ind-row"><span>HY Δ 5д<br><span class="ind-sub">насколько быстро эта переплата растёт за неделю</span></span><span class="ind-val">${cd.hyChg!=null?cd.hyChg:'—'}</span></div>${hChg5(cd.hyChg,'Спреды HY')}
+      <div class="ind-row"><span>CCC OAS (дно junk)<br><span class="ind-sub">то же самое, но для самых слабых компаний</span></span><span class="ind-val">${cd.ccc!=null?cd.ccc+'%':'—'}${cd.cccChg!=null?' ('+cd.cccChg+')':''}</span></div>${hCCC(cd.ccc)}
+      <div class="ind-row"><span>BBB OAS (инвест-грейд)<br><span class="ind-sub">переплата даже у надёжных компаний</span></span><span class="ind-val">${cd.bbb!=null?cd.bbb+'%':'—'}</span></div>${hBBB(cd.bbb)}
+      <div class="ind-row"><span>Просрочки CRE<br><span class="ind-sub">доля просроченных кредитов в коммерческой недвижимости</span></span><span class="ind-val">${cd.cre!=null?cd.cre+'%':'—'}</span></div>${hDelinq(cd.cre,1.5,'коммерческой недвижимости')}
+      <div class="ind-row"><span>Просрочки ипотеки<br><span class="ind-sub">доля просроченных жилищных кредитов</span></span><span class="ind-val">${cd.mort!=null?cd.mort+'%':'—'}</span></div>${hDelinq(cd.mort,2.5,'ипотеке')}
+      <div class="ind-row"><span>Ужесточение кредитов (SLOOS)<br><span class="ind-sub">доля банков, которые стали строже выдавать кредиты</span></span><span class="ind-val">${cd.sloos!=null?cd.sloos:'—'}</span></div>${hSloos(cd.sloos)}
+      <div class="ind-row"><span>KRE за 3 мес.<br><span class="ind-sub">динамика акций региональных банков США</span></span><span class="ind-val">${cd.kreChg!=null?cd.kreChg+'%':'—'}</span></div>${hKRE(cd.kreChg)}
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «легко ли компаниям и банкам занимать деньги». Когда переплата за риск растёт, а банки закручивают гайки — это ранний признак того, что кредитный рынок ломается, что обычно бьёт по экономике с задержкой в несколько месяцев.</div>`;
 
   const sd=engines.structure.details;
   document.getElementById('structureDetails').innerHTML=`
     <div class="engine-score">${engines.structure.score}</div>
     <div class="engine-label">${engines.structure.trend} · голос: ${voteRu[engines.structure.vote]||engines.structure.vote}</div>
     <div style="margin-top:10px">
-      <div class="ind-row"><span>VIX (страх акций)</span><span class="ind-val">${sd.vix??'—'} ${sd.vixChg!=null?'('+sd.vixChg+')':''}</span></div>
-      <div class="ind-row"><span>MOVE (волатильность ставок)</span><span class="ind-val">${sd.move??'—'} ${sd.moveChg!=null?'('+sd.moveChg+')':''}</span></div>
-      <div class="ind-row"><span>VVIX</span><span class="ind-val">${sd.vvix??'—'}</span></div>
-      <div class="ind-row"><span>Ширина рынка (% акций S&amp;P500 &gt;50DMA)</span><span class="ind-val">${sd.breadth!=null?sd.breadth+'%':'—'}</span></div>
-      <div class="ind-row"><span>VIX term structure (front/3m)</span><span class="ind-val">${sd.vixTermRatio??'—'}</span></div>
-      <div class="ind-row"><span>Put/Call (SPY+QQQ+IWM, объём)</span><span class="ind-val">${sd.putcall??'—'}</span></div>
-      <div class="ind-row"><span>Новые макс.−мин. (S&amp;P500, %)</span><span class="ind-val">${sd.highslows!=null?sd.highslows+'%':'—'}</span></div>
-      <div class="ind-row"><span>SPY vs RSP (узость)</span><span class="ind-val">${sd.rspGap!=null?sd.rspGap+'%':'—'}</span></div>
-    </div>`;
+      <div class="ind-row"><span>VIX (страх акций)<br><span class="ind-sub">насколько сильных колебаний рынок ждёт от акций</span></span><span class="ind-val">${sd.vix??'—'} ${sd.vixChg!=null?'('+sd.vixChg+')':''}</span></div>${hVix(sd.vix)}
+      <div class="ind-row"><span>MOVE (волатильность ставок)<br><span class="ind-sub">то же самое, но для рынка облигаций</span></span><span class="ind-val">${sd.move??'—'} ${sd.moveChg!=null?'('+sd.moveChg+')':''}</span></div>${hMove(sd.move)}
+      <div class="ind-row"><span>VVIX<br><span class="ind-sub">насколько нестабилен сам индекс страха VIX</span></span><span class="ind-val">${sd.vvix??'—'}</span></div>${hVvix(sd.vvix)}
+      <div class="ind-row"><span>Ширина рынка<br><span class="ind-sub">% акций S&amp;P 500 выше своей 50-дневной средней — растёт ли рынок широко или только за счёт немногих</span></span><span class="ind-val">${sd.breadth!=null?sd.breadth+'%':'—'}</span></div>${hBreadth(sd.breadth)}
+      <div class="ind-row"><span>VIX term structure<br><span class="ind-sub">сравнение страха «прямо сейчас» и страха «через 3 мес.»</span></span><span class="ind-val">${sd.vixTermRatio??'—'}</span></div>${hVterm(sd.vixTermRatio)}
+      <div class="ind-row"><span>Put/Call<br><span class="ind-sub">сколько ставок на падение по сравнению со ставками на рост</span></span><span class="ind-val">${sd.putcall??'—'}</span></div>${hPCR(sd.putcall)}
+      <div class="ind-row"><span>Новые макс. − мин.<br><span class="ind-sub">баланс акций у годового максимума против годового минимума</span></span><span class="ind-val">${sd.highslows!=null?sd.highslows+'%':'—'}</span></div>${hHL(sd.highslows)}
+      <div class="ind-row"><span>SPY vs RSP<br><span class="ind-sub">крупные компании обгоняют средние — рынок держится на немногих</span></span><span class="ind-val">${sd.rspGap!=null?sd.rspGap+'%':'—'}</span></div>${hRspGap(sd.rspGap)}
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «насколько рынок акций и облигаций нервничает прямо сейчас, и насколько широко распределён рост». Скачок страха сам по себе — ещё не кризис, но резкий и одновременный рост по нескольким строкам сразу — важный сигнал.</div>`;
 
   const fd=engines.flow.details;
   document.getElementById('flowDetails').innerHTML=`
     <div class="engine-score">${engines.flow.score}</div>
     <div class="engine-label">${engines.flow.trend} · голос: ${voteRu[engines.flow.vote]||engines.flow.vote}</div>
     <div style="margin-top:10px">
-      <div class="ind-row"><span>USD/JPY</span><span class="ind-val">${fd.usdjpy??'—'} ${fd.jpyChg!=null?'('+fd.jpyChg+'%)':''}</span></div>
-      <div class="ind-row"><span>DXY (индекс доллара)</span><span class="ind-val">${fd.dxy??'—'} ${fd.dxyChg!=null?'('+fd.dxyChg+'%)':''}</span></div>
-      <div class="ind-row"><span>Фандинг BTC</span><span class="ind-val">${fd.funding!=null?(fd.funding*100).toFixed(3)+'%':'—'}</span></div>
-      <div class="ind-row"><span>Стейблкоины за 7д</span><span class="ind-val">${fd.stableChg!=null?fd.stableChg+'%':'—'}</span></div>
-      <div class="ind-row"><span>Золото / SPY за 1 мес.</span><span class="ind-val">${fd.goldRet??'—'} / ${fd.spyRet??'—'}</span></div>
-      <div class="ind-row"><span>Нефть за 1 мес.</span><span class="ind-val">${fd.oilRet!=null?fd.oilRet+'%':'—'}</span></div>
-      <div class="ind-row"><span>Медь за 3 мес. (Dr. Copper)</span><span class="ind-val">${fd.copperChg!=null?fd.copperChg+'%':'—'}</span></div>
-      <div class="ind-row"><span>Copper/Gold ratio</span><span class="ind-val">${fd.cgRatio!=null?fd.cgRatio:'—'} ${fd.cgSignal?('('+fd.cgSignal+')'):''}</span></div>
-      <div class="ind-row"><span>Copper vs Gold gap (3м)</span><span class="ind-val">${fd.cgGap!=null?fd.cgGap+'%':'—'}</span></div>
-    </div>`;
+      <div class="ind-row"><span>USD/JPY<br><span class="ind-sub">курс доллара к иене — маркер «керри-трейда» (займы в дешёвой иене)</span></span><span class="ind-val">${fd.usdjpy??'—'} ${fd.jpyChg!=null?'('+fd.jpyChg+'%)':''}</span></div>${hUsdJpy(fd.usdjpy)}
+      <div class="ind-row"><span>DXY (индекс доллара)<br><span class="ind-sub">сила доллара к корзине валют</span></span><span class="ind-val">${fd.dxy??'—'} ${fd.dxyChg!=null?'('+fd.dxyChg+'%)':''}</span></div>${hDxy(fd.dxy)}
+      <div class="ind-row"><span>Фандинг BTC<br><span class="ind-sub">кто платит комиссию на срочном рынке биткоина — лонги или шорты</span></span><span class="ind-val">${fd.funding!=null?(fd.funding*100).toFixed(3)+'%':'—'}</span></div>${hFunding(fd.funding)}
+      <div class="ind-row"><span>Стейблкоины за 7д<br><span class="ind-sub">приток/отток денег в крипторынок</span></span><span class="ind-val">${fd.stableChg!=null?fd.stableChg+'%':'—'}</span></div>${hStable(fd.stableChg)}
+      <div class="ind-row"><span>Золото / SPY за 1 мес.<br><span class="ind-sub">бегут ли деньги из акций в защитное золото</span></span><span class="ind-val">${fd.goldRet??'—'} / ${fd.spyRet??'—'}</span></div>
+      <div class="ind-row"><span>Нефть за 1 мес.<br><span class="ind-sub">резкие движения — сигнал о спросе/шоке предложения</span></span><span class="ind-val">${fd.oilRet!=null?fd.oilRet+'%':'—'}</span></div>${hOil(fd.oilRet)}
+      <div class="ind-row"><span>Медь за 3 мес. (Dr. Copper)<br><span class="ind-sub">медь считается барометром реальной экономики</span></span><span class="ind-val">${fd.copperChg!=null?fd.copperChg+'%':'—'}</span></div>
+      <div class="ind-row"><span>Copper/Gold ratio<br><span class="ind-sub">промышленный спрос (медь) против защитного актива (золото)</span></span><span class="ind-val">${fd.cgRatio!=null?fd.cgRatio:'—'} ${fd.cgSignal?('('+fd.cgSignal+')'):''}</span></div>${hCopperGold(fd.cgSignal)}
+      <div class="ind-row"><span>Copper vs Gold gap (3м)<br><span class="ind-sub">разрыв в динамике меди и золота за квартал</span></span><span class="ind-val">${fd.cgGap!=null?fd.cgGap+'%':'—'}</span></div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «куда сейчас перетекают деньги в мире» — в защитные активы (страх) или в рискованные (жадность), и не назревает ли проблема в керри-трейде на иене.</div>`;
 
   const md=engines.macro.details;
   document.getElementById('macroDetails').innerHTML=`
     <div class="engine-score">${engines.macro.score}</div>
     <div class="engine-label">${engines.macro.trend} · голос: ${voteRu[engines.macro.vote]||engines.macro.vote}</div>
     <div style="margin-top:10px">
-      <div class="ind-row"><span>Первичные заявки по безработице</span><span class="ind-val">${md.claims??'—'} Δ${md.claimsChg??'—'}</span></div>
-      <div class="ind-row"><span>Начало строительства жилья</span><span class="ind-val">${md.housing??'—'}</span></div>
-      <div class="ind-row"><span>Разрешения на строительство, Δ</span><span class="ind-val">${md.permitChg!=null?md.permitChg+'%':'—'}</span></div>
-      <div class="ind-row"><span>New Orders (Durable Goods), Δ</span><span class="ind-val">${md.durableChg!=null?md.durableChg+'%':'—'}</span></div>
-      <div class="ind-row"><span>Временная занятость, Δ3мес</span><span class="ind-val">${md.tempChg3m!=null?md.tempChg3m+'%':'—'}</span></div>
-      <div class="ind-row"><span>Baltic Dry (прокси BDRY)</span><span class="ind-val">${md.baltic??'—'}</span></div>
-      <div class="ind-row"><span>Copper/Gold ratio</span><span class="ind-val">${md.cgRatio??'—'} ${md.cgSignal?('('+md.cgSignal+')'):''}</span></div>
+      <div class="ind-row"><span>Первичные заявки по безработице<br><span class="ind-sub">сколько новых людей встало на учёт по безработице за неделю</span></span><span class="ind-val">${md.claims??'—'} Δ${md.claimsChg??'—'}</span></div>${hClaims(md.claimsChg)}
+      <div class="ind-row"><span>Начало строительства жилья<br><span class="ind-sub">сколько новых домов начали строить — уровень, тыс. в год</span></span><span class="ind-val">${md.housing??'—'}</span></div>
+      <div class="ind-row"><span>Housing starts, Δ<br><span class="ind-sub">изменение строительства жилья — реально двигает этот движок</span></span><span class="ind-val">${md.housingChg!=null?(md.housingChg>0?'+':'')+md.housingChg+'%':'—'}</span></div>${hHousingChg(md.housingChg)}
+      <div class="ind-row"><span>Разрешения на строительство, Δ<br><span class="ind-sub">опережает начало строительства на 1–2 мес.</span></span><span class="ind-val">${md.permitChg!=null?md.permitChg+'%':'—'}</span></div>${hPermit(md.permitChg)}
+      <div class="ind-row"><span>New Orders (Durable Goods), Δ<br><span class="ind-sub">заказы на дорогие товары длительного пользования — прокси инвестиций бизнеса</span></span><span class="ind-val">${md.durableChg!=null?md.durableChg+'%':'—'}</span></div>${hDurable(md.durableChg)}
+      <div class="ind-row"><span>Временная занятость, Δ3мес<br><span class="ind-sub">первой сокращают временный персонал — ранний сигнал по рынку труда</span></span><span class="ind-val">${md.tempChg3m!=null?md.tempChg3m+'%':'—'}</span></div>${hTempHelp(md.tempChg3m)}
+      <div class="ind-row"><span>Baltic Dry, уровень<br><span class="ind-sub">стоимость морских грузоперевозок — прокси мировой торговли</span></span><span class="ind-val">${md.baltic??'—'}</span></div>
+      <div class="ind-row"><span>Baltic Dry, Δ<br><span class="ind-sub">изменение — реально двигает этот движок</span></span><span class="ind-val">${md.balticChg!=null?(md.balticChg>0?'+':'')+md.balticChg+'%':'—'}</span></div>${hBaltic(md.balticChg)}
+      <div class="ind-row"><span>Copper/Gold ratio<br><span class="ind-sub">справочно, на итоговый score макро-движка не влияет</span></span><span class="ind-val">${md.cgRatio??'—'} ${md.cgSignal?('('+md.cgSignal+')'):''}</span></div>
       <div class="ind-row"><span>Copper vs Gold (3м)</span><span class="ind-val">медь ${md.copperChg??'—'}% / золото ${md.goldChg??'—'}%</span></div>
-    </div>`;
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «замедляется реальная экономика или нет». Раньше в этой панели не показывались строки «Housing starts, Δ» и «Baltic Dry, Δ» — а именно они, наряду с заявками по безработице, formируют итоговый score. Теперь видно всё, что реально влияет на цифру.</div>`;
 
   document.getElementById('regimeDetails').innerHTML=`
     <div class="engine-score" style="font-size:18px">${regime.title}</div>
@@ -1091,11 +1110,15 @@ const voteHtml=v=>{
 
   document.getElementById('confDetails').innerHTML=`
     <div class="engine-score">${conf.confidence}%</div>
-    <div class="engine-label">Agreement ${conf.agreement}% · Покрытие ${conf.dataQuality}% · Свежесть ${conf.freshness}%</div>
+    <div class="engine-label">Насколько можно доверять текущему показанию индекса прямо сейчас</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>Согласие движков<br><span class="ind-sub">насколько единодушны все 5 движков между собой</span></span><span class="ind-val">${conf.agreement}%</span></div>
+      <div class="ind-row"><span>Покрытие данных<br><span class="ind-sub">сколько из нужных источников данных вообще получены</span></span><span class="ind-val">${conf.dataQuality}%</span></div>
+      <div class="ind-row"><span>Свежесть данных<br><span class="ind-sub">насколько недавние (не устаревшие/не из кэша) данные использованы</span></span><span class="ind-val">${conf.freshness}%</span></div>
+    </div>
     <div style="margin-top:10px;font-size:11px;color:var(--dim);line-height:1.45">
-      <b>Это не accuracy модели.</b> Метрика = agreement голосов × покрытие источников × freshness (включая штраф за кэш).<br>
-      Не говорит, что «модель права в ${conf.confidence}% случаев». Историческая точность не измеряется (нет Brier score / out-of-sample).
-      ${conf.covered!=null?`<br>Покрытие: ${conf.covered}/${conf.expected} ключевых полей.`:' '}
+      <b>Важно понимать:</b> это не «точность модели» и не означает, что индекс «прав в ${conf.confidence}% случаев». Историческая точность нигде не измерялась — это просто честная оценка качества входных данных прямо сейчас: если движки спорят между собой, данных не хватает или они устарели — доверие к цифре ниже.
+      ${conf.covered!=null?`<br>Получено ${conf.covered} из ${conf.expected} ключевых источников данных.`:' '}
     </div>`;
 }
 
@@ -1179,8 +1202,6 @@ function renderInsufficientData(reason){
   const warn=document.getElementById('noDataWarn');
   if(warn){ warn.classList.add('show'); warn.textContent='⚠ Недостаточно данных для оценки. Индекс стресса не рассчитан.'; }
   document.getElementById('staleWarn').classList.remove('show');
-  const staleListElReset=document.getElementById('staleList');
-  if(staleListElReset) staleListElReset.innerHTML='';
   document.getElementById('headerTs').textContent='нет данных';
   ['crisisDetails','oppDetails','liqDetails','creditDetails','structureDetails','flowDetails','macroDetails','regimeDetails','bubbleDetails','confDetails'].forEach(id=>{
     const el=document.getElementById(id);
