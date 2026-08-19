@@ -819,6 +819,24 @@ function ageMinutes(ts){if(ts==null)return Infinity;const t=typeof ts==='number'
 function formatAge(m){if(!isFinite(m))return 'н/д';if(m<1)return Math.round(m*60)+'s';if(m<60)return Math.round(m)+'m';if(m<1440)return Math.round(m/60)+'h';const d=Math.round(m/1440);return d===1?'1d':d+'d'}
 function freshStatus(type,last){const lim=FRESH_LIMITS[type]||FRESH_LIMITS.Daily;const age=ageMinutes(last);if(age<=lim.ok)return {level:'ok',dot:'🟢'};if(age<=lim.warn)return {level:'warn',dot:'🟡'};return {level:'stale',dot:'🔴'}}
 
+const SRC_NAMES={vix:'VIX (страх акций)',move:'MOVE (волатильность ставок)',liq:'Ликвидность / баланс ФРС',hy:'HY-спреды (кредит)',breadth:'Ширина рынка',fx:'Валюты (USD/JPY, DXY)',crypto:'Крипта (фандинг, стейблы)',kre:'Региональные банки (KRE)',m2:'Денежная масса M2',ccc:'CCC-спреды (junk-дно)',bbb:'BBB-спреды (инвестгрейд)',cbGlobal:'Балансы ЕЦБ / Банка Японии',pcr:'Put/Call ratio',vixterm:'VIX term structure',macroExtra:'Макро (стройка/заказы/занятость)',narrow:'Узость рынка (RSP/IWM)',copper:'Медь',goldSpot:'Золото'};
+function buildStaleList(meta,keys){
+  const items=[];
+  keys.forEach(k=>{
+    const m=meta[k]; const label=SRC_NAMES[k]||k;
+    if(!m){ items.push({label,reason:'нет данных вообще'}); return; }
+    const bits=[];
+    if(m.fromCache) bits.push('взято из кэша (сохранённое ранее значение)');
+    if(m.lastUpdate){
+      const st=freshStatus(m.updateType||'Daily', m.lastUpdate);
+      if(st.level==='stale') bits.push('устарело — обновлялось '+formatAge(ageMinutes(m.lastUpdate))+' назад');
+      else if(st.level==='warn') bits.push('чуть устарело — '+formatAge(ageMinutes(m.lastUpdate))+' назад');
+    } else bits.push('нет времени последнего обновления');
+    if(bits.length) items.push({label,reason:bits.join(', ')});
+  });
+  return items;
+}
+
 function calculateConfidence(raw, engines, crisis){
   // «Согласованность» ≠ accuracy. Только agreement × покрытие × freshness.
   // Кэшированные (fromCache) поля штрафуются по своему lastUpdate так же, как свежие.
@@ -965,7 +983,18 @@ function render(result, raw, ts, source){
   document.getElementById('headerTs').textContent=ts?new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
 
   const warn=document.getElementById('staleWarn');
-  if(conf.staleWarn){warn.classList.add('show');warn.textContent='⚠ Согласованность снижена: устаревшие или кэшированные данные.'}else warn.classList.remove('show');
+  if(conf.staleWarn){
+    warn.classList.add('show');
+    const expectedKeys=['vix','move','liq','hy','breadth','fx','crypto','kre','m2','ccc','bbb','cbGlobal','pcr','vixterm','macroExtra','narrow','copper','goldSpot'];
+    const staleList=buildStaleList(raw._meta||{}, expectedKeys);
+    const shown=staleList.slice(0,7);
+    const rest=staleList.length-shown.length;
+    warn.innerHTML=`⚠ Согласованность снижена: часть данных устарела или взята из кэша, а не получена только что.`
+      +(shown.length?`<div style="margin-top:6px;font-size:10px;color:var(--dim);line-height:1.6">`
+        +shown.map(it=>`• <b style="color:var(--text)">${it.label}</b> — ${it.reason}`).join('<br>')
+        +(rest>0?`<br>+ ещё ${rest} источник(ов)`:'')
+        +`</div>`:'');
+  }else warn.classList.remove('show');
 
 const voteHtml=v=>{
     const cls=v==='crash'?'vote-crash':v==='bearish'?'vote-bearish':v==='bullish'?'vote-bullish':'vote-neutral';
