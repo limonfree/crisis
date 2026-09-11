@@ -333,19 +333,36 @@ async function fetchSP500List(){
    с 2023 требует crumb+cookie сессию, из браузера без бэкенда всегда отдаёт
    401 {"error":{"code":"Unauthorized","description":"Invalid Crumb"}}. Поэтому breadth
    раньше ВСЕГДА проваливался в упрощённый SPY-прокси ниже, хотя выглядело это как
-   рабочий расчёт. Теперь считаем по-настоящему: тянем дневные свечи по каждому тикеру
-   через v8/finance/chart (этот эндпойнт crumb не требует — им же пользуются fetchVIX,
-   fetchCommodities и т.д.) и считаем SMA50 и 52-нед. хай/лоу локально. */
-async function fetchTickerStats(symbol){
-  const y=await yahooChart(symbol,'1y','1d');
-  if(!y?.closes?.length)return null;
-  const c=y.closes.filter(x=>typeof x==='number'&&x>0);
-  if(c.length<55)return null;
-  const price=c[c.length-1];
-  const sma50=c.slice(-50).reduce((a,b)=>a+b,0)/50;
-  const hi52=Math.max(...c);
-  const lo52=Math.min(...c);
-  return {price,sma50,hi52,lo52};
+   рабочий расчёт. Теперь считаем по-настоящему через v8/finance/chart (crumb не нужен). */
+async function fetchTickerStatsDirect(symbol){
+  // Специально БЕЗ fetchSmart/прокси: при выборке в полсотни тикеров подряд прогон
+  // через общую очередь прокси (MAX_CONCURRENT=2, она одна на всё приложение) может
+  // растянуть весь цикл обновления на десятки секунд и держать остальные карточки
+  // в подвешенном состоянии, пока Promise.allSettled ждёт этот один промис. Поэтому
+  // здесь только быстрый прямой запрос с коротким таймаутом; тикер, до которого
+  // Yahoo не достучаться напрямую, просто пропускается — на точность breadth
+  // (агрегат по выборке) это не влияет.
+  const hosts=['query1','query2'];
+  for(const host of hosts){
+    try{
+      const url=`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y&_cb=${Date.now()}`;
+      const r=await fetchWithTimeout(url,{cache:'no-store',mode:'cors'},5000);
+      if(!r.ok)continue;
+      const d=await r.json();
+      const res=d?.chart?.result?.[0];
+      const closes=(res?.indicators?.quote?.[0]?.close||[]).filter(x=>typeof x==='number'&&x>0);
+      if(closes.length<55)continue;
+      const price=closes[closes.length-1];
+      const sma50=closes.slice(-50).reduce((a,b)=>a+b,0)/50;
+      const hi52=Math.max(...closes);
+      const lo52=Math.min(...closes);
+      return {price,sma50,hi52,lo52};
+    }catch(e){}
+  }
+  return null;
+}
+function withTimeout(promise,ms,fallbackValue){
+  return Promise.race([promise,new Promise(res=>setTimeout(()=>res(fallbackValue),ms))]);
 }
 async function pooledMap(items,worker,concurrency){
   const results=new Array(items.length);
@@ -362,15 +379,17 @@ async function pooledMap(items,worker,concurrency){
 let _breadthCache=null,_breadthTs=0;
 async function fetchBreadth(){
   if(_breadthCache&&Date.now()-_breadthTs<20*60*1000)return _breadthCache;
+  const real=await withTimeout((async()=>{
   try{
     const tickersRaw=await fetchSP500List();
-    // Диверсифицированная выборка (каждый N-й тикер из уже отсортированного по секторам
-    // списка), чтобы не делать 500 запросов за один цикл обновления — ограничиваем ~180.
-    const CAP=180;
+    // Небольшая диверсифицированная выборка (каждый N-й тикер из списка, отсортированного
+    // по секторам) — этого достаточно для стабильной агрегатной оценки и укладывается
+    // в жёсткий тайм-аут ниже, не задерживая остальные 20+ индикаторов в этом же цикле.
+    const CAP=60;
     const step=Math.max(1,Math.ceil(tickersRaw.length/CAP));
     const sample=tickersRaw.filter((_,i)=>i%step===0);
     const symbols=sample.map(t=>t.replace(/\./g,'-'));
-    const stats=await pooledMap(symbols,fetchTickerStats,10);
+    const stats=await pooledMap(symbols,fetchTickerStatsDirect,10);
     let above=0,total=0,nearHigh=0,nearLow=0,hlTotal=0;
     for(const s of stats){
       if(!s)continue;
@@ -382,7 +401,7 @@ async function fetchBreadth(){
         else if(s.price<=s.lo52*1.02)nearLow++;
       }
     }
-    if(total>=60){
+    if(total>=20){
       const pct=Math.round((above/total)*100);
       const nearHighPct=hlTotal?Math.round((nearHigh/hlTotal)*100):null;
       const nearLowPct=hlTotal?Math.round((nearLow/hlTotal)*100):null;
@@ -392,6 +411,9 @@ async function fetchBreadth(){
       return res;
     }
   }catch(e){}
+  return null;
+  })(),12000,null);
+  if(real)return real;
   // Резервный вариант (если пофакторный расчёт совсем недоступен): прокси через сам SPY vs его 50/200dma
   const y=await yahooChart('SPY','1y','1d');
   if(y?.closes?.length>=200){
