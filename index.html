@@ -279,29 +279,51 @@
 const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:0.10 };
 
 /* ---------- Anti-ban / fetch layer (from v1, kept) ---------- */
+/* v2.5: диагностика (см. панель "Источники") показала 0/21 живых Yahoo/FRED-источников —
+   ВСЕ 4 публичных CORS-прокси одновременно не отвечали. Это ожидаемо: бесплатные прокси без
+   SLA дохнут/банятся/переходят на платный тариф без предупреждения (corsproxy.io в 2026 стал
+   коммерческим продуктом с лендингом и, судя по всему, обрезал бесплатный доступ). Добавлены
+   ещё 2 независимых бесплатных прокси (thingproxy, corsfix) — просто больше кандидатов в
+   ротации, деплоить ничего не надо. Самый надёжный фикс — собственный прокси: если он у тебя
+   есть, впиши URL в MY_CORS_PROXY ниже (см. файл cors-proxy-worker.js рядом — опционально,
+   деплоится за 5 минут на Cloudflare, бесплатно), он будет пробоваться первым. Пока пусто —
+   работает только на публичных прокси. */
+const MY_CORS_PROXY=''; // опционально: 'https://your-worker-name.your-subdomain.workers.dev/?url='
 const PROXY_BUILDERS=[
+  ...(MY_CORS_PROXY?[u=>MY_CORS_PROXY+encodeURIComponent(u)]:[]),
+  u=>`https://thingproxy.freeboard.io/fetch/${u}`,
+  u=>`https://proxy.corsfix.com/?url=${encodeURIComponent(u)}`,
   u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
   u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
   u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
   u=>`https://proxy.killcors.com/?url=${encodeURIComponent(u)}`,
 ];
-/* v2.3: proxy.cors.sh удалён — с 2024 требует платный API-ключ, всегда отдавал 403 и просто
-   съедал слот в гонке прокси. corsproxy.io раньше был вызван без параметра url= (баг: строка
-   собиралась как /?<encoded>, а не /?url=<encoded>) — сервис его тихо игнорировал. Добавлен
-   proxy.killcors.com как второй бесплатный резерв без ключа и лимитов. */
 let _lastGoodProxy=0, _activeProxy=0; const MAX_CONCURRENT=4; const _proxyQueue=[];
-/* v2.4: было 2 — с общим лимитом на все ~200+ под-запросов цикла (24 источника, из которых
-   fetchBreadth сам по себе тянет до 180 тикеров) это было главным узким местом: как только
-   Yahoo/FRED начинали чаще отказывать в прямом CORS-доступе, всё проваливалось в эту очередь
-   и цикл растягивался на многие минуты. 4 — разумный компромисс, чтобы не долбить бесплатные
-   прокси слишком агрессивно, но и не сериализовать всё в 2 потока. */
+/* v2.5: circuit breaker — если прокси подряд облажался 2 раза, он "глохнет" на несколько минут
+   и мы перестаём его пробовать (вместо того чтобы на КАЖДОМ из ~20 источников заново ждать его
+   таймаут). Именно отсутствие этого механизма и было причиной многоминутных зависаний: когда все
+   публичные прокси легли одновременно, каждый источник всё равно честно ждал полный таймаут
+   каждого из них по очереди. Через ~5 минут пробуем снова — вдруг ожил. */
+const PROXY_COOLDOWN_MS=5*60*1000;
+let _proxyFailStreak={}, _proxyDeadUntil={};
+function proxyAlive(idx){return !(_proxyDeadUntil[idx]&&Date.now()<_proxyDeadUntil[idx])}
+function proxyOk(idx){_proxyFailStreak[idx]=0;delete _proxyDeadUntil[idx]}
+function proxyBad(idx){_proxyFailStreak[idx]=(_proxyFailStreak[idx]||0)+1;if(_proxyFailStreak[idx]>=2)_proxyDeadUntil[idx]=Date.now()+PROXY_COOLDOWN_MS}
 function runQueued(fn){return new Promise((resolve,reject)=>{const run=async()=>{_activeProxy++;try{resolve(await fn())}catch(e){reject(e)}finally{_activeProxy--;if(_proxyQueue.length)_proxyQueue.shift()()}};if(_activeProxy<MAX_CONCURRENT)run();else _proxyQueue.push(run)})}
 function shuffle(a){const b=a.slice();for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
-function orderProxies(maxN){const n=PROXY_BUILDERS.length,rest=[];for(let i=0;i<n;i++)if(i!==_lastGoodProxy)rest.push(i);return [_lastGoodProxy,...shuffle(rest)].slice(0,Math.min(maxN,n))}
+function orderProxies(maxN){
+  const n=PROXY_BUILDERS.length;
+  const alive=[],dead=[];
+  for(let i=0;i<n;i++)(proxyAlive(i)?alive:dead).push(i);
+  const pool=alive.length?alive:[...alive,...dead]; // если все "мертвы" — всё равно пробуем, вдруг ожили
+  const rest=pool.filter(i=>i!==_lastGoodProxy);
+  const ordered=pool.includes(_lastGoodProxy)?[_lastGoodProxy,...shuffle(rest)]:shuffle(pool);
+  return ordered.slice(0,Math.min(maxN,ordered.length));
+}
 function isValidProxyBody(data,asText){if(data==null)return false;if(asText){const s=String(data).trim();if(!s||s.startsWith('<')||/429 Too Many|Access Denied|rate limit|error code:\s*5|Cloudflare/i.test(s))return false}else if(data.error||data.status==='error')return false;return true}
 function fetchWithTimeout(url,opts={},ms=9000){const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t))}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-async function tryOneProxy(idx,cleanTarget,asText,timeout){const url=PROXY_BUILDERS[idx](cleanTarget);const r=await fetchWithTimeout(url,{cache:'no-store'},timeout);if(!r.ok)throw new Error('status '+r.status);const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))throw new Error('bad body');return data}
+async function tryOneProxy(idx,cleanTarget,asText,timeout){try{const url=PROXY_BUILDERS[idx](cleanTarget);const r=await fetchWithTimeout(url,{cache:'no-store'},timeout);if(!r.ok)throw new Error('status '+r.status);const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))throw new Error('bad body');proxyOk(idx);return data}catch(e){proxyBad(idx);throw e}}
 async function tryDirectFetch(targetUrl,asText,timeout){try{const sep=targetUrl.includes('?')?'&':'?';const url=targetUrl+sep+'_cb='+Date.now();const r=await fetchWithTimeout(url,{cache:'no-store',mode:'cors'},timeout);if(!r.ok)return null;const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))return null;return data}catch(e){return null}}
 async function fetchViaProxies(targetUrl,key,{asText=false,maxTries=3,timeout=11000}={}){return runQueued(async()=>{const order=orderProxies(Math.min(maxTries+1,PROXY_BUILDERS.length));const cleanTarget=targetUrl+(targetUrl.includes('?')?'&':'?')+'_cb='+Date.now();const raceN=Math.min(2,order.length);const raceResult=await new Promise(resolve=>{let left=raceN,done=false;if(raceN===0){resolve(null);return}for(let i=0;i<raceN;i++){const idx=order[i];tryOneProxy(idx,cleanTarget,asText,timeout).then(data=>{if(!done){done=true;_lastGoodProxy=idx;resolve(data)}}).catch(()=>{left--;if(left===0&&!done)resolve(null)})}});if(raceResult!=null)return raceResult;for(let i=raceN;i<order.length;i++){try{await sleep(150+Math.random()*250);const data=await tryOneProxy(order[i],cleanTarget,asText,timeout);_lastGoodProxy=order[i];return data}catch(_){}}return null})}
 async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,directTimeout=4500}={}){const direct=await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
@@ -315,8 +337,12 @@ async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,d
    выполнятся вообще все 24 источника. guarded() ниже даёт каждому источнику жёсткий предел
    времени и пишет его текущий статус в DIAG в реальном времени, не дожидаясь конца всего
    цикла. */
-const DIAG_TIMEOUT_MS=22000;
-const DIAG_TIMEOUT_BREADTH_MS=32000;
+const DIAG_TIMEOUT_MS=26000;
+const DIAG_TIMEOUT_BREADTH_MS=36000;
+/* v2.5: подняты с 22/32с — при действительно мёртвых прокси (см. circuit breaker выше)
+   fetchSmart всё равно честно проходит direct + гонку 2 прокси + до 2 последовательных
+   попыток, прежде чем сдаться; 22с иногда обрезали это раньше, чем прокси-слой успевал
+   реально попробовать живую альтернативу (если она была 3-й/4-й в очереди). */
 const SOURCE_LABELS={
   vix:'VIX', move:'MOVE', vvix:'VVIX', liq:'Net Liquidity (Fed)', m2:'M2',
   hy:'HY OAS', delinq:'CRE/ипотека delinquency', sloos:'SLOOS', kre:'KRE (regional banks)',
@@ -376,7 +402,16 @@ function renderDiagnostics(){
   }).join('');
   const el=document.getElementById('diagRows'); if(el)el.innerHTML=rows;
   const summary=document.getElementById('diagSummary');
-  if(summary)summary.textContent=`${okCount}/${keys.length} живых в этом цикле`+(pendingCount?`, ${pendingCount} ещё идёт`:'')+(badCount?`, ${badCount} таймаут/ошибка`:'');
+  if(summary){
+    let s=`${okCount}/${keys.length} живых в этом цикле`+(pendingCount?`, ${pendingCount} ещё идёт`:'')+(badCount?`, ${badCount} таймаут/ошибка`:'');
+    try{
+      const n=PROXY_BUILDERS.length;
+      let allDead=n>0;
+      for(let i=0;i<n;i++)if(proxyAlive(i)){allDead=false;break}
+      if(allDead)s+=' · ⚠ все CORS-прокси сейчас недоступны — задай свой в MY_CORS_PROXY (см. cors-proxy-worker.js)';
+    }catch(e){}
+    summary.textContent=s;
+  }
   const chip=document.getElementById('diagChip');
   if(chip){chip.textContent=`${okCount}/${keys.length}`;chip.style.color=badCount>keys.length/2?'#e2001a':'var(--dim)'}
 }
