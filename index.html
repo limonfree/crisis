@@ -421,7 +421,7 @@
 
 <script>
 /* ============================================================
-   Global Liquidity & Crisis Stress Index Engine v2.11 (fix: proxy circuit breaker, breadth threshold, Stooq/options off)
+   Global Liquidity & Crisis Stress Index Engine v2.12 (data.json; fix: proxy circuit breaker, breadth threshold, Stooq/options off)
    ============================================================ */
 
 const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:0.10 };
@@ -622,7 +622,11 @@ function renderHeartbeat(){
 setInterval(()=>{renderHeartbeat();renderDiagnostics()},1000);
 
 /* ---------- Yahoo / FRED helpers ---------- */
-async function yahooChart(symbol,range='5d',interval='1d'){const hosts=shuffle(['query1','query2']);const attempts=[{range,interval},{range:'5d',interval:'1d'}];for(const host of hosts){for(const a of attempts){const target=`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${a.interval}&range=${a.range}`;const d=await fetchSmart(target,'yahoo',{maxTries:2,timeout:9000,directTimeout:4000});const res=d?.chart?.result?.[0];if(!res)continue;const meta=res.meta||{};const quotes=res.indicators?.quote?.[0]||{};const closes=(quotes.close||[]).filter(x=>x!=null&&typeof x==='number');const isLive=meta.regularMarketPrice!=null;const price=meta.regularMarketPrice??closes[closes.length-1]??meta.previousClose;if(typeof price==='number'&&!isNaN(price)&&price>0)return {price,closes,meta,source:`Yahoo ${symbol}${isLive?'':' (close)'}`}}}return null}
+let MARKET=null;
+async function loadMarket(){try{const r=await fetchWithTimeout('data.json?_='+Date.now(),{cache:'no-store'},10000);if(r.ok){const d=await r.json();if(d&&d.series)MARKET=d}}catch(e){}}
+const RANGE_N={'1d':2,'5d':5,'1mo':22,'2mo':42,'3mo':63,'1y':260};
+async function yahooChart(symbol,range='5d',interval='1d'){
+  if(MARKET){const a=MARKET.series[symbol];if(!a||a.length<2)return null;const closes=a.slice(-(RANGE_N[range]||5));const price=a[a.length-1];return {price,closes,meta:{previousClose:a[a.length-2]},source:'Yahoo '+symbol+' (data.json '+MARKET.updated+')'}}const hosts=shuffle(['query1','query2']);const attempts=[{range,interval},{range:'5d',interval:'1d'}];for(const host of hosts){for(const a of attempts){const target=`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${a.interval}&range=${a.range}`;const d=await fetchSmart(target,'yahoo',{maxTries:2,timeout:9000,directTimeout:4000});const res=d?.chart?.result?.[0];if(!res)continue;const meta=res.meta||{};const quotes=res.indicators?.quote?.[0]||{};const closes=(quotes.close||[]).filter(x=>x!=null&&typeof x==='number');const isLive=meta.regularMarketPrice!=null;const price=meta.regularMarketPrice??closes[closes.length-1]??meta.previousClose;if(typeof price==='number'&&!isNaN(price)&&price>0)return {price,closes,meta,source:`Yahoo ${symbol}${isLive?'':' (close)'}`}}}return null}
 async function fetchFredSeriesDirect(seriesId,days=120){try{const end=new Date(),start=new Date();start.setDate(start.getDate()-days);const fmt=d=>d.toISOString().slice(0,10);const url=`https://fred.libhack.so/v0/observations?series_id=${seriesId}&observation_start=${fmt(start)}&observation_end=${fmt(end)}`;const r=await fetchWithTimeout(url,{cache:'no-store'},7000);if(!r.ok)return null;const arr=await r.json();if(!Array.isArray(arr)||!arr.length)return null;return arr.map(p=>({date:p.date,val:parseFloat(p.value)})).filter(p=>!isNaN(p.val))}catch(e){return null}}
 async function fetchFredCsv(seriesId){const txt=await fetchSmart(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,'fred_'+seriesId,{asText:true,maxTries:3,timeout:11000,directTimeout:4500});if(!txt||typeof txt!=='string')return [];const lines=txt.trim().split('\n').filter(l=>l&&!/^DATE/i.test(l)&&!/^observation/i.test(l));const pts=[];for(const line of lines){const parts=line.split(',');const val=parseFloat(parts[1]);if(!isNaN(val))pts.push({date:parts[0],val})}return pts}
 async function fetchFred(seriesId,days=120){const pts=await fetchFredCsv(seriesId);return pts?.length?pts:null}
@@ -637,9 +641,9 @@ async function fetchFred(seriesId,days=120){const pts=await fetchFredCsv(seriesI
    покрытии, и это единственный встретившийся вариант без него). ВАЖНО: добавь "stooq.com"
    в ALLOWED_HOSTS своего прокси (cors-proxy-valtown-simple.js / cors-proxy-worker.js) и
    передеплой — иначе прокси будет отдавать 403 на эти запросы. */
-const STOOQ_ENABLED=true; // поставь true после добавления stooq.com в ALLOWED_HOSTS прокси и передеплоя
+const STOOQ_ENABLED=false; // Stooq из браузера не работает; рыночные ряды теперь берутся из data.json // поставь true после добавления stooq.com в ALLOWED_HOSTS прокси и передеплоя
 async function stooqDaily(symbol){
-  if(!STOOQ_ENABLED)return null;
+  if(!STOOQ_ENABLED||MARKET)return null;
   try{
     const url=`https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
     const txt=await fetchSmart(url,'stooq_'+symbol,{asText:true,maxTries:2,timeout:9000,directTimeout:3500});
@@ -796,7 +800,7 @@ async function fetchBreadth(){
     const CAP=45;
     const step=Math.max(1,Math.ceil(tickersRaw.length/CAP));
     const sample=tickersRaw.filter((_,i)=>i%step===0);
-    const symbols=sample.map(t=>t.replace(/\./g,'-'));
+    const symbols=(MARKET&&MARKET.breadth_symbols&&MARKET.breadth_symbols.length)?MARKET.breadth_symbols:sample.map(t=>t.replace(/\./g,'-'));
     const stats=await pooledMap(symbols,fetchTickerStats,10);
     let above=0,total=0,nearHigh=0,nearLow=0,hlTotal=0;
     for(const s of stats){
@@ -1737,6 +1741,7 @@ async function fetchOpenSources(){
   btn.disabled=true;
   if(location.protocol==='file:'){status.textContent='⚠️ Открыто как файл — залей на Netlify Drop / GitHub Pages (HTTPS)';btn.disabled=false;return}
   status.textContent='Загружаю (бережный режим)...';
+  await loadMarket();
   cycleStartedAt=Date.now(); cycleRunning=true; renderHeartbeat();
   try{
     const results=await Promise.allSettled([
