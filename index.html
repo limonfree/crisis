@@ -98,7 +98,7 @@
 <body>
 <header>
   <h1>CRISIS ENGINE v2.3<span class="cursor"></span></h1>
-  <div class="mini mono" style="color:var(--dim);margin-top:2px">build: 2026-10-18 · val-town proxy</div>
+  <div class="mini mono" style="color:var(--dim);margin-top:2px">build: 2026-10-18-c · stooq + 3h refresh</div>
   <span class="ts mono" id="headerTs">—</span>
 </header>
 <main>
@@ -444,7 +444,7 @@ function renderDiagnostics(){
       const n=PROXY_BUILDERS.length;
       let allDead=n>0;
       for(let i=0;i<n;i++)if(proxyAlive(i)){allDead=false;break}
-      if(allDead)s+=' · ⚠ все CORS-прокси сейчас недоступны — задай свой в MY_CORS_PROXY (см. cors-proxy-worker.js)';
+      if(allDead)s+=' · ⚠ все CORS-прокси сейчас недоступны — задай свой адрес в переменной MY_CORS_PROXY внутри index.html (это не отдельный файл на сайте, просто настройка в коде)';
     }catch(e){}
     summary.textContent=s;
   }
