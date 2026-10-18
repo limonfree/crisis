@@ -421,7 +421,7 @@
 
 <script>
 /* ============================================================
-   Global Liquidity & Crisis Stress Index Engine v2.10 (fix: proxy circuit breaker, breadth threshold, Stooq/options off)
+   Global Liquidity & Crisis Stress Index Engine v2.11 (fix: proxy circuit breaker, breadth threshold, Stooq/options off)
    ============================================================ */
 
 const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:0.10 };
@@ -436,12 +436,6 @@ const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:
 const MY_CORS_PROXY='https://limonfree--9fcb8b30cacf11f1a6b71607ee4eb77e.web.val.run/?url=';
 const PROXY_BUILDERS=[
   ...(MY_CORS_PROXY?[u=>MY_CORS_PROXY+encodeURIComponent(u)]:[]),
-  u=>`https://thingproxy.freeboard.io/fetch/${u}`,
-  u=>`https://proxy.corsfix.com/?url=${encodeURIComponent(u)}`,
-  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-  u=>`https://proxy.killcors.com/?url=${encodeURIComponent(u)}`,
 ];
 let _lastGoodProxy=0, _activeProxy=0; const MAX_CONCURRENT=6; const _proxyQueue=[];
 /* v2.5: circuit breaker — если прокси подряд облажался 2 раза, он "глохнет" на несколько минут
@@ -468,7 +462,10 @@ function orderProxies(maxN){
 function isValidProxyBody(data,asText){if(data==null)return false;if(asText){const s=String(data).trim();if(!s||s.startsWith('<')||/429 Too Many|Access Denied|rate limit|error code:\s*5|Cloudflare/i.test(s))return false}else if(data.error||data.status==='error')return false;return true}
 function fetchWithTimeout(url,opts={},ms=9000){const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t))}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-async function tryOneProxy(idx,cleanTarget,asText,timeout){
+const NETLOG={};
+function netlog(t,ok,msg){try{const h=new URL(t).hostname.replace(/^query\d\./,'');const n=NETLOG[h]||(NETLOG[h]={ok:0,fail:0,last:''});if(ok)n.ok++;else{n.fail++;n.last=msg||n.last}}catch(e){}}
+async function tryOneProxy(idx,t,a,to){try{const d=await _tryOneProxy(idx,t,a,to);netlog(t,true);return d}catch(e){netlog(t,false,String((e&&e.message)||e).slice(0,40));throw e}}
+async function _tryOneProxy(idx,cleanTarget,asText,timeout){
   // v2.7: 429 от апстрима (Yahoo и т.п.) больше НЕ считается поломкой самого прокси —
   // раньше circuit breaker ошибочно банил рабочий MY_CORS_PROXY за rate-limit от Yahoo,
   // откатывая на заведомо дохлые публичные прокси. Прокси "жив", если он доставил ответ,
@@ -508,9 +505,11 @@ function makeRateGate(minGapMs){
   };
 }
 const yahooGate=makeRateGate(220);
+const fredGate=makeRateGate(350);
 async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,directTimeout=4500}={}){
   if(targetUrl.includes('finance.yahoo.com'))await yahooGate();
-  const direct=/finance\.yahoo\.com|fred\.stlouisfed\.org|stooq\.com/.test(targetUrl)?null:await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
+  if(targetUrl.includes('fred.stlouisfed.org'))await fredGate();
+  const direct=/finance\.yahoo\.com|fred\.stlouisfed\.org|stooq\.com|cdn\.cboe\.com/.test(targetUrl)?null:await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
 
 /* ---------- v2.4: live per-source diagnostics + watchdog ----------
    Раньше один зависший источник (чаще всего fetchBreadth — до 180 тикеров через общую
@@ -542,7 +541,7 @@ function persistDiag(){try{localStorage.setItem('ce2:diag',JSON.stringify(DIAG))
 function timeoutAfter(ms){return new Promise(res=>setTimeout(()=>res('__TIMEOUT__'),ms))}
 async function guarded(key,promiseFactory,ms){
   const label=SOURCE_LABELS[key]||key;
-  DIAG[key]=Object.assign({},DIAG[key],{label,status:'pending',startedAt:Date.now()});
+  DIAG[key]=Object.assign({},DIAG[key],{label,status:'pending',startedAt:Date.now(),detail:''});
   renderDiagnostics();
   const t0=Date.now();
   let val;
@@ -558,7 +557,7 @@ async function guarded(key,promiseFactory,ms){
     return null;
   }
   const ok=val!=null && !(typeof val==='object' && !Array.isArray(val) && Object.keys(val).length===0);
-  DIAG[key]=Object.assign({},DIAG[key],{status:ok?'ok':'empty',finishedAt:Date.now(),ms:Date.now()-t0,lastOkAt:ok?Date.now():(DIAG[key]&&DIAG[key].lastOkAt)});
+  DIAG[key]=Object.assign({},DIAG[key],{status:ok?'ok':'empty',detail:ok?'':'нет данных',finishedAt:Date.now(),ms:Date.now()-t0,lastOkAt:ok?Date.now():(DIAG[key]&&DIAG[key].lastOkAt)});
   renderDiagnostics();persistDiag();
   return val;
 }
@@ -594,6 +593,7 @@ function renderDiagnostics(){
       for(let i=0;i<n;i++)if(proxyAlive(i)){allDead=false;break}
       if(allDead)s+=' · ⚠ все CORS-прокси сейчас недоступны — задай свой адрес в переменной MY_CORS_PROXY внутри index.html (это не отдельный файл на сайте, просто настройка в коде)';
     }catch(e){}
+    try{const nl=Object.entries(NETLOG).map(([h,n])=>h+' '+n.ok+'\u2713/'+n.fail+'\u2717'+(n.fail&&n.last?' ('+n.last+')':'')).join(' · ');if(nl)s+=' || '+nl}catch(e){}
     summary.textContent=s;
   }
   const chip=document.getElementById('diagChip');
@@ -625,7 +625,7 @@ setInterval(()=>{renderHeartbeat();renderDiagnostics()},1000);
 async function yahooChart(symbol,range='5d',interval='1d'){const hosts=shuffle(['query1','query2']);const attempts=[{range,interval},{range:'5d',interval:'1d'}];for(const host of hosts){for(const a of attempts){const target=`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${a.interval}&range=${a.range}`;const d=await fetchSmart(target,'yahoo',{maxTries:2,timeout:9000,directTimeout:4000});const res=d?.chart?.result?.[0];if(!res)continue;const meta=res.meta||{};const quotes=res.indicators?.quote?.[0]||{};const closes=(quotes.close||[]).filter(x=>x!=null&&typeof x==='number');const isLive=meta.regularMarketPrice!=null;const price=meta.regularMarketPrice??closes[closes.length-1]??meta.previousClose;if(typeof price==='number'&&!isNaN(price)&&price>0)return {price,closes,meta,source:`Yahoo ${symbol}${isLive?'':' (close)'}`}}}return null}
 async function fetchFredSeriesDirect(seriesId,days=120){try{const end=new Date(),start=new Date();start.setDate(start.getDate()-days);const fmt=d=>d.toISOString().slice(0,10);const url=`https://fred.libhack.so/v0/observations?series_id=${seriesId}&observation_start=${fmt(start)}&observation_end=${fmt(end)}`;const r=await fetchWithTimeout(url,{cache:'no-store'},7000);if(!r.ok)return null;const arr=await r.json();if(!Array.isArray(arr)||!arr.length)return null;return arr.map(p=>({date:p.date,val:parseFloat(p.value)})).filter(p=>!isNaN(p.val))}catch(e){return null}}
 async function fetchFredCsv(seriesId){const txt=await fetchSmart(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,'fred_'+seriesId,{asText:true,maxTries:3,timeout:11000,directTimeout:4500});if(!txt||typeof txt!=='string')return [];const lines=txt.trim().split('\n').filter(l=>l&&!/^DATE/i.test(l)&&!/^observation/i.test(l));const pts=[];for(const line of lines){const parts=line.split(',');const val=parseFloat(parts[1]);if(!isNaN(val))pts.push({date:parts[0],val})}return pts}
-async function fetchFred(seriesId,days=120){const [direct,csv]=await Promise.all([fetchFredSeriesDirect(seriesId,days),fetchFredCsv(seriesId)]);const pts=(direct&&direct.length>=(csv?.length||0))?direct:csv;return pts?.length?pts:null}
+async function fetchFred(seriesId,days=120){const pts=await fetchFredCsv(seriesId);return pts?.length?pts:null}
 
 /* ---------- v2.9: Stooq — второй независимый источник тикеров/индексов/фьючерсов ----------
    Бесплатно, без ключа, простой CSV. Используется НЕ вместо Yahoo, а В ГОНКЕ с ним
@@ -710,7 +710,7 @@ async function fetchKRE(){
     async()=>{const s=await stooqDaily('kre.us');if(!s?.closes?.length)return null;const last=s.closes[s.closes.length-1];const first=s.closes[0];return {price:Math.round(last*100)/100,chg3m:Math.round(((last/first)-1)*1000)/10,source:s.source,updateType:'Daily'}}
   ]);
 }
-async function fetchFX(){let rates=null,provider=null;const providers=[{url:'https://open.er-api.com/v6/latest/USD',name:'er-api'},{url:'https://api.exchangerate-api.com/v4/latest/USD',name:'exchangerate-api'},{url:'https://api.frankfurter.app/latest?from=USD',name:'frankfurter'}];for(const p of providers){try{const r=await fetchWithTimeout(p.url,{cache:'no-store'},5000);const d=await r.json();if(d&&(d.rates||d.conversion_rates)){rates=d.rates||d.conversion_rates;provider=p.name;break}}catch(e){}}if(!rates)return {};const usdjpy=rates.JPY||null;const EURUSD=1/(rates.EUR||0.92),USDJPY=rates.JPY||150,GBPUSD=1/(rates.GBP||0.79),USDCAD=rates.CAD||1.36,USDSEK=rates.SEK||10.5,USDCHF=rates.CHF||0.88;const dxy=Math.round(50.14348112*Math.pow(EURUSD,-0.576)*Math.pow(USDJPY,0.136)*Math.pow(GBPUSD,-0.119)*Math.pow(USDCAD,0.091)*Math.pow(USDSEK,0.042)*Math.pow(USDCHF,0.036)*100)/100;let usdjpy_chg=null,dxy_chg=null;try{const past=new Date();past.setDate(past.getDate()-30);const r=await fetchWithTimeout(`https://api.frankfurter.app/${past.toISOString().slice(0,10)}?from=USD&to=JPY,EUR,GBP,CAD,SEK,CHF`,{cache:'no-store'},5000);const d=await r.json();if(d?.rates){if(d.rates.JPY&&usdjpy)usdjpy_chg=Math.round(((usdjpy-d.rates.JPY)/d.rates.JPY)*1000)/10;const oEUR=1/(d.rates.EUR||0.92),oJPY=d.rates.JPY||150,oGBP=1/(d.rates.GBP||0.79),oCAD=d.rates.CAD||1.36,oSEK=d.rates.SEK||10.5,oCHF=d.rates.CHF||0.88;const oldDxy=50.14348112*Math.pow(oEUR,-0.576)*Math.pow(oJPY,0.136)*Math.pow(oGBP,-0.119)*Math.pow(oCAD,0.091)*Math.pow(oSEK,0.042)*Math.pow(oCHF,0.036);if(oldDxy&&dxy)dxy_chg=Math.round(((dxy-oldDxy)/oldDxy)*1000)/10}}catch(e){}return {usdjpy,usdjpy_chg,dxy,dxy_chg,source:provider}}
+async function fetchFX(){let rates=null,provider=null;const providers=[{url:'https://open.er-api.com/v6/latest/USD',name:'er-api'},{url:'https://api.exchangerate-api.com/v4/latest/USD',name:'exchangerate-api'},{url:'https://api.frankfurter.dev/v1/latest?base=USD',name:'frankfurter'}];for(const p of providers){try{const r=await fetchWithTimeout(p.url,{cache:'no-store'},5000);const d=await r.json();if(d&&(d.rates||d.conversion_rates)){rates=d.rates||d.conversion_rates;provider=p.name;break}}catch(e){}}if(!rates)return {};const usdjpy=rates.JPY||null;const EURUSD=1/(rates.EUR||0.92),USDJPY=rates.JPY||150,GBPUSD=1/(rates.GBP||0.79),USDCAD=rates.CAD||1.36,USDSEK=rates.SEK||10.5,USDCHF=rates.CHF||0.88;const dxy=Math.round(50.14348112*Math.pow(EURUSD,-0.576)*Math.pow(USDJPY,0.136)*Math.pow(GBPUSD,-0.119)*Math.pow(USDCAD,0.091)*Math.pow(USDSEK,0.042)*Math.pow(USDCHF,0.036)*100)/100;let usdjpy_chg=null,dxy_chg=null;try{const past=new Date();past.setDate(past.getDate()-30);const r=await fetchWithTimeout(`https://api.frankfurter.dev/v1/${past.toISOString().slice(0,10)}?base=USD&symbols=JPY,EUR,GBP,CAD,SEK,CHF`,{cache:'no-store'},5000);const d=await r.json();if(d?.rates){if(d.rates.JPY&&usdjpy)usdjpy_chg=Math.round(((usdjpy-d.rates.JPY)/d.rates.JPY)*1000)/10;const oEUR=1/(d.rates.EUR||0.92),oJPY=d.rates.JPY||150,oGBP=1/(d.rates.GBP||0.79),oCAD=d.rates.CAD||1.36,oSEK=d.rates.SEK||10.5,oCHF=d.rates.CHF||0.88;const oldDxy=50.14348112*Math.pow(oEUR,-0.576)*Math.pow(oJPY,0.136)*Math.pow(oGBP,-0.119)*Math.pow(oCAD,0.091)*Math.pow(oSEK,0.042)*Math.pow(oCHF,0.036);if(oldDxy&&dxy)dxy_chg=Math.round(((dxy-oldDxy)/oldDxy)*1000)/10}}catch(e){}return {usdjpy,usdjpy_chg,dxy,dxy_chg,source:provider}}
 async function fetchCrypto(){const out={funding:false,ethbtc:false,stable:false,fundingRate:null,stableChg7d:null,btc:null,ethbtcRatio:null};try{const r=await fetchWithTimeout('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT',{cache:'no-store'},5000);const d=await r.json();const fr=parseFloat(d.lastFundingRate??d.interestRate);if(!isNaN(fr)){out.fundingRate=fr;if(fr>=0.0005||fr<=-0.0001)out.funding=true}}catch(e){}try{const r=await fetchWithTimeout('https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd&include_24hr_change=true',{cache:'no-store'},5000);const d=await r.json();if(d.ethereum&&d.bitcoin){out.btc=d.bitcoin.usd;if((d.ethereum.usd_24h_change||0)<(d.bitcoin.usd_24h_change||0)-1.5)out.ethbtc=true;if(d.bitcoin.usd)out.ethbtcRatio=d.ethereum.usd/d.bitcoin.usd}}catch(e){}try{const r=await fetchWithTimeout('https://stablecoins.llama.fi/stablecoins?includePrices=true',{cache:'no-store'},6000);const d=await r.json();if(d?.peggedAssets){let now=0,prev=0;d.peggedAssets.forEach(a=>{now+=a.circulating?.peggedUSD||0;const p=a.circulatingPrevWeek?.peggedUSD??a.circulatingPrevDay?.peggedUSD;if(p!=null)prev+=p});if(prev>0){const chg=((now-prev)/prev)*100;out.stableChg7d=Math.round(chg*100)/100;if(chg<-0.8)out.stable=true}}}catch(e){}return out}
 /* ---------- Market breadth: % акций S&P 500 выше своей 50-дневной SMA ----------
    Прозрачная замена CNN "McClellan"-скора (CNN не публикует формулу перевода
@@ -848,7 +848,7 @@ async function fetchCommodities(){
     tickerCloses('QQQ','qqq.us'),tickerCloses('CL=F','cl.f')
   ]);
   const ret=y=>{if(!y?.closes?.length||y.closes.length<5)return null;return Math.round(((y.closes[y.closes.length-1]/y.closes[0])-1)*1000)/10};
-  return {goldRet:ret(gld),tltRet:ret(tlt),spyRet:ret(spy),qqqRet:ret(qqq),oilRet:ret(oil),spyPrice:spy?.price,qqqPrice:qqq?.price};
+  const _c={goldRet:ret(gld),tltRet:ret(tlt),spyRet:ret(spy),qqqRet:ret(qqq),oilRet:ret(oil),spyPrice:spy?.price,qqqPrice:qqq?.price};if([_c.goldRet,_c.tltRet,_c.spyRet,_c.qqqRet,_c.oilRet].every(v=>v==null))return {};return _c;
 }
 async function fetchMacro(){const [claims,housing,ism]=await Promise.all([fetchFred('ICSA',30),fetchFred('HOUST',12),fetchFred('MANEMP',12)]);const out={};if(claims?.length){out.claims=claims[claims.length-1].val;out.claimsChg=claims.length>=5?claims[claims.length-1].val-claims[claims.length-5].val:null}if(housing?.length){out.housing=housing[housing.length-1].val;out.housingChg=housing.length>=2?housing[housing.length-1].val-housing[housing.length-2].val:null}if(ism?.length)out.ismProxy=ism[ism.length-1].val;return Object.keys(out).length?out:null}
 async function fetchBaltic(){
