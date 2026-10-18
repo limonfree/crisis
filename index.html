@@ -321,10 +321,48 @@ function orderProxies(maxN){
 function isValidProxyBody(data,asText){if(data==null)return false;if(asText){const s=String(data).trim();if(!s||s.startsWith('<')||/429 Too Many|Access Denied|rate limit|error code:\s*5|Cloudflare/i.test(s))return false}else if(data.error||data.status==='error')return false;return true}
 function fetchWithTimeout(url,opts={},ms=9000){const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t))}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-async function tryOneProxy(idx,cleanTarget,asText,timeout){try{const url=PROXY_BUILDERS[idx](cleanTarget);const r=await fetchWithTimeout(url,{cache:'no-store'},timeout);if(!r.ok)throw new Error('status '+r.status);const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))throw new Error('bad body');proxyOk(idx);return data}catch(e){proxyBad(idx);throw e}}
+async function tryOneProxy(idx,cleanTarget,asText,timeout){
+  // v2.7: 429 от апстрима (Yahoo и т.п.) больше НЕ считается поломкой самого прокси —
+  // раньше circuit breaker ошибочно банил рабочий MY_CORS_PROXY за rate-limit от Yahoo,
+  // откатывая на заведомо дохлые публичные прокси. Прокси "жив", если он доставил ответ,
+  // каким бы ни был код апстрима; "мёртв" он только если до него самого не достучаться,
+  // либо он вернул явный мусор/непонятный статус.
+  const url=PROXY_BUILDERS[idx](cleanTarget);
+  let r;
+  try{ r=await fetchWithTimeout(url,{cache:'no-store'},timeout) }
+  catch(e){ proxyBad(idx); throw e }
+  if(r.status===429){ proxyOk(idx); throw new Error('upstream 429 (rate-limited)') }
+  if(!r.ok){ proxyBad(idx); throw new Error('status '+r.status) }
+  let data;
+  try{ data=asText?await r.text():await r.json() }
+  catch(e){ proxyBad(idx); throw e }
+  if(!isValidProxyBody(data,asText)){ proxyBad(idx); throw new Error('bad body') }
+  proxyOk(idx);
+  return data;
+}
 async function tryDirectFetch(targetUrl,asText,timeout){try{const sep=targetUrl.includes('?')?'&':'?';const url=targetUrl+sep+'_cb='+Date.now();const r=await fetchWithTimeout(url,{cache:'no-store',mode:'cors'},timeout);if(!r.ok)return null;const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))return null;return data}catch(e){return null}}
 async function fetchViaProxies(targetUrl,key,{asText=false,maxTries=3,timeout=11000}={}){return runQueued(async()=>{const order=orderProxies(Math.min(maxTries+1,PROXY_BUILDERS.length));const cleanTarget=targetUrl+(targetUrl.includes('?')?'&':'?')+'_cb='+Date.now();const raceN=Math.min(2,order.length);const raceResult=await new Promise(resolve=>{let left=raceN,done=false;if(raceN===0){resolve(null);return}for(let i=0;i<raceN;i++){const idx=order[i];tryOneProxy(idx,cleanTarget,asText,timeout).then(data=>{if(!done){done=true;_lastGoodProxy=idx;resolve(data)}}).catch(()=>{left--;if(left===0&&!done)resolve(null)})}});if(raceResult!=null)return raceResult;for(let i=raceN;i<order.length;i++){try{await sleep(150+Math.random()*250);const data=await tryOneProxy(order[i],cleanTarget,asText,timeout);_lastGoodProxy=order[i];return data}catch(_){}}return null})}
-async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,directTimeout=4500}={}){const direct=await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
+/* v2.7: раньше ~24 источника + до 80 тикеров breadth стреляли в Yahoo почти одновременно
+   через ОДИН постоянный IP прокси — Yahoo это видит как явный скрейпинг и банит 429-ми.
+   Публичные прокси этого не показывали просто потому что до Yahoo вообще не достукивались.
+   makeRateGate ограничивает частоту запросов именно к Yahoo (не трогает FRED/CBOE/крипто) —
+   очередь сохраняет порядок, но не чаще одного отправленного запроса раз в YAHOO_MIN_GAP_MS. */
+function makeRateGate(minGapMs){
+  let last=0, chain=Promise.resolve();
+  return function gate(){
+    const run=chain.then(async()=>{
+      const wait=Math.max(0,last+minGapMs-Date.now());
+      if(wait>0)await sleep(wait);
+      last=Date.now();
+    });
+    chain=run.catch(()=>{});
+    return run;
+  };
+}
+const yahooGate=makeRateGate(220);
+async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,directTimeout=4500}={}){
+  if(targetUrl.includes('finance.yahoo.com'))await yahooGate();
+  const direct=await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
 
 /* ---------- v2.4: live per-source diagnostics + watchdog ----------
    Раньше один зависший источник (чаще всего fetchBreadth — до 180 тикеров через общую
@@ -529,7 +567,11 @@ async function fetchBreadth(){
     // 180 тикеров, каждый через yahooChart→fetchSmart, при деградации прямого CORS-доступа
     // разом проваливались в общую очередь прокси и держали весь цикл. 80 тикеров — всё ещё
     // статистически представительная выборка для % >50DMA, но кратно меньше нагрузка.
-    const CAP=80;
+    // v2.7: снижено с 80 до 45 — с троттлингом в 220мс между запросами к Yahoo (см. yahooGate)
+    // 80 тикеров означали бы ~18с только на паузы между отправками, плюс время самих
+    // запросов; 45 — всё ещё статистически представительная выборка, но укладывается в бюджет
+    // с запасом даже вместе с остальными ~14 "быстрыми" Yahoo-источниками в этом же цикле.
+    const CAP=45;
     const step=Math.max(1,Math.ceil(tickersRaw.length/CAP));
     const sample=tickersRaw.filter((_,i)=>i%step===0);
     const symbols=sample.map(t=>t.replace(/\./g,'-'));
