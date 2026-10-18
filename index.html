@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
+<html lang="ru"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#ffffff">
@@ -99,144 +99,267 @@
 <header>
   <h1>CRISIS ENGINE v2.3<span class="cursor"></span></h1>
   <div class="mini mono" style="color:var(--dim);margin-top:2px">build: 2026-10-18-c · stooq + 3h refresh</div>
-  <span class="ts mono" id="headerTs">—</span>
+  <span class="ts mono" id="headerTs">18.10, 22:45</span>
 </header>
 <main>
-  <div class="stale-warn" id="staleWarn">⚠ Согласованность снижена: устаревшие или кэшированные данные.</div>
+  <div class="stale-warn show" id="staleWarn">⚠ Согласованность снижена: часть данных устарела или взята из кэша, а не получена только что.<div style="margin-top:6px;font-size:10px;color:var(--dim);line-height:1.6">• <b style="color:var(--text)">VIX (страх акций)</b> — взято из кэша (сохранённое ранее значение)<br>• <b style="color:var(--text)">MOVE (волатильность ставок)</b> — нет данных вообще<br>• <b style="color:var(--text)">Ликвидность / баланс ФРС</b> — взято из кэша (сохранённое ранее значение)<br>• <b style="color:var(--text)">HY-спреды (кредит)</b> — взято из кэша (сохранённое ранее значение), устарело — обновлялось 3d назад<br>• <b style="color:var(--text)">Ширина рынка</b> — нет данных вообще<br>• <b style="color:var(--text)">Региональные банки (KRE)</b> — нет данных вообще<br>• <b style="color:var(--text)">Денежная масса M2</b> — взято из кэша (сохранённое ранее значение), устарело — обновлялось 78d назад<br>+ ещё 9 источник(ов)</div></div>
   <div class="stale-warn" id="noDataWarn" style="background:#fbe6e8;border-color:var(--red);color:var(--red)">⚠ Недостаточно данных для оценки. Индекс не рассчитан.</div>
 
   <!-- LIVE HEARTBEAT: показывает, идёт ли обновление прямо сейчас, зависло оно или просто ждёт таймер -->
   <div class="heartbeat" id="heartbeatBar" data-panel="panelDiag">
-    <span class="hb-dot" id="hbDot"></span>
-    <span class="hb-text mono" id="hbText">запуск…</span>
-    <span class="hb-chip" id="diagChip">—/—</span>
+    <span class="hb-dot pending" id="hbDot" style="background: rgb(153, 153, 153);"></span>
+    <span class="hb-text mono" id="hbText">обновляю данные… 12с</span>
+    <span class="hb-chip" id="diagChip" style="color: var(--dim);">5/24</span>
   </div>
 
   <!-- HERO -->
   <div class="hero">
     <div class="hero-card" id="crisisCard" data-panel="panelCrisis">
       <div class="eyebrow">Индекс стресса</div>
-      <div class="big mono" id="crisisPct">—</div>
-      <div class="sub" id="crisisSub">эвристика · 1–6 мес</div>
-      <div class="mini mono" id="crisisAge" style="margin-top:4px;font-size:10px;color:var(--dim)">—</div>
+      <div class="big mono" id="crisisPct" style="color: rgb(68, 68, 68);">57</div>
+      <div class="sub" id="crisisSub">Повышенный · score · Нейтрал</div>
+      <div class="mini mono" id="crisisAge" style="margin-top:4px;font-size:10px;color:var(--dim)">🔴 кэш 4d</div>
     </div>
     <div class="hero-card" id="oppCard" data-panel="panelOpp">
       <div class="eyebrow">Индекс возможности</div>
-      <div class="big mono" id="oppPct">—</div>
-      <div class="sub" id="oppSub">окно покупки</div>
-      <div class="mini mono" id="oppAge" style="margin-top:4px;font-size:10px;color:var(--dim)">—</div>
+      <div class="big mono" id="oppPct" style="color: var(--dim);">40</div>
+      <div class="sub" id="oppSub">ожидание</div>
+      <div class="mini mono" id="oppAge" style="margin-top:4px;font-size:10px;color:var(--dim)">🔴 кэш 4d</div>
     </div>
   </div>
 
   <div class="grid2">
     <div class="card" data-panel="panelLiq">
       <div class="eyebrow">Ликвидность</div>
-      <div class="val mono" id="liqTrend">—</div>
-      <div class="mini" id="liqScore">—</div>
-      <div class="mini mono" id="liqAge" style="margin-top:2px">—</div>
+      <div class="val mono" id="liqTrend" style="color: var(--text);">Нейтрально</div>
+      <div class="mini" id="liqScore">47/100</div>
+      <div class="mini mono" id="liqAge" style="margin-top:2px">🟢 кэш 4d</div>
     </div>
     <div class="card" data-panel="panelCredit">
       <div class="eyebrow">Кредит</div>
-      <div class="val mono" id="creditTrend">—</div>
-      <div class="mini" id="creditScore">—</div>
-      <div class="mini mono" id="creditAge" style="margin-top:2px">—</div>
+      <div class="val mono" id="creditTrend" style="color: rgb(68, 68, 68);">Слабый</div>
+      <div class="mini" id="creditScore">46/100 стресс</div>
+      <div class="mini mono" id="creditAge" style="margin-top:2px">🔴 кэш 3d</div>
     </div>
   </div>
   <div class="grid3">
     <div class="card" data-panel="panelRegime">
       <div class="eyebrow">Режим</div>
-      <div class="val mono" id="regimeVal" style="font-size:13px">—</div>
-      <div class="mini mono" id="regimeAge" style="margin-top:2px">—</div>
+      <div class="val mono" id="regimeVal" style="font-size:13px">Рецессия</div>
+      <div class="mini mono" id="regimeAge" style="margin-top:2px">🔴 кэш 4d</div>
     </div>
     <div class="card" data-panel="panelBubble">
       <div class="eyebrow">Пузырь (эвристика)</div>
-      <div class="val mono" id="bubblePct">—</div>
-      <div class="mini mono" id="bubbleAge" style="margin-top:2px">—</div>
+      <div class="val mono" id="bubblePct" style="color: var(--text);">30</div>
+      <div class="mini mono" id="bubbleAge" style="margin-top:2px">🔴 кэш 4d</div>
     </div>
     <div class="card" data-panel="panelConf">
       <div class="eyebrow">Согласованность</div>
-      <div class="val mono" id="confPct">—</div>
-      <div class="conf-bar"><div class="conf-fill" id="confBar" style="width:0%"></div></div>
-      <div class="mini mono" id="confAge" style="margin-top:2px">не accuracy</div>
+      <div class="val mono" id="confPct" style="color: rgb(107, 107, 107);">10%</div>
+      <div class="conf-bar"><div class="conf-fill" id="confBar" style="width: 10%; background: rgb(107, 107, 107);"></div></div>
+      <div class="mini mono" id="confAge" style="margin-top:2px">не accuracy · 10/18</div>
     </div>
   </div>
 
-  <div class="card" id="actionCard" data-panel="panelCrisis" style="margin-bottom:12px;border-left:4px solid var(--leaf)">
+  <div class="card" id="actionCard" data-panel="panelCrisis" style="margin-bottom: 12px; border-left-width: ; border-left-style: ; border-left-color: var(--leaf);">
     <div class="eyebrow">Действие портфеля</div>
-    <div class="val mono" id="actionTitle" style="font-size:14px">—</div>
-    <div class="mini" id="actionSize" style="margin-top:4px">—</div>
-    <div class="mini" id="actionBody" style="margin-top:6px;line-height:1.4;color:var(--text);font-size:11.5px">—</div>
+    <div class="val mono" id="actionTitle" style="font-size:14px">Повышенный риск</div>
+    <div class="mini" id="actionSize" style="margin-top:4px">Размер: дефенс 20–35% · горизонт: недели–месяцы</div>
+    <div class="mini" id="actionBody" style="margin-top:6px;line-height:1.4;color:var(--text);font-size:11.5px">Убрать плечо, не открывать новый риск. Ребаланс в сторону качества. Полный кэш — избыточен (opportunity cost как в 2016).</div>
   </div>
 
-  <button class="btn btn-primary" id="refreshBtn">ОБНОВИТЬ СЕЙЧАС</button>
-  <div class="status-line" id="statusLine"></div>
+  <button class="btn btn-primary" id="refreshBtn" disabled="disabled">ОБНОВИТЬ СЕЙЧАС</button>
+  <div class="status-line" id="statusLine">Загружаю (бережный режим)...</div>
   <div class="status-line" style="margin-top:2px">бережное автообновление · только открытые API</div>
 
   <!-- DETAIL PANELS -->
   <div class="panel" id="panelCrisis">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Индекс стресса · детали</h3>
-    <div id="crisisDetails"></div>
+    <div id="crisisDetails">
+    <div class="engine-score" style="color:#444444">57</div>
+    <div class="engine-label">Эвристический индекс стресса 0–100 · <b>не</b> статистическая вероятность<br>Тип сигнала: <b>Повышенный</b> · горизонт 1–6 мес</div>
+    <div style="margin-top:10px;padding:10px;background:var(--bg-panel);border-radius:8px;font-size:12px;line-height:1.45">
+      <b>Повышенный риск</b><br>Убрать плечо, не открывать новый риск. Ребаланс в сторону качества. Полный кэш — избыточен (opportunity cost как в 2016).<br>
+      <span style="color:var(--dim);font-size:11px">2016, часть 2011: коррекция/секторный стресс, не глобальный крах.</span>
+    </div>
+    <div style="margin-top:12px">
+      <div class="ind-row"><span>Согласованность движков<br><span class="ind-sub">сколько из 5 движков голосуют одинаково</span></span><span class="ind-val">80% (4/5)</span></div>
+      <div class="ind-row"><span>Итоговый голос большинства</span><span class="vote-tag vote-neutral">Нейтрал</span></div>
+      <div class="ind-row"><span>Ликвидность · стресс 0–100<br><span class="ind-sub">вес в итоговом индексе: 35%</span></span><span class="vote-tag vote-neutral">Нейтрал</span> <span class="ind-val">53</span></div>
+      <div class="ind-row"><span>Кредит · стресс 0–100<br><span class="ind-sub">вес: 25%</span></span><span class="vote-tag vote-neutral">Нейтрал</span> <span class="ind-val">46</span></div>
+      <div class="ind-row"><span>Структура · стресс 0–100<br><span class="ind-sub">вес: 15%</span></span><span class="vote-tag vote-neutral">Нейтрал</span> <span class="ind-val">32</span></div>
+      <div class="ind-row"><span>Потоки · стресс 0–100<br><span class="ind-sub">вес: 15%</span></span><span class="vote-tag vote-neutral">Нейтрал</span> <span class="ind-val">38</span></div>
+      <div class="ind-row"><span>Макро · стресс 0–100<br><span class="ind-sub">вес: 10%</span></span><span class="vote-tag vote-crash">Крах</span> <span class="ind-val">75</span></div>
+      <div class="ind-row"><span>Ускорение<br><span class="ind-sub">насколько быстро ухудшаются показатели — резкий рывок опаснее плавного дрейфа</span></span><span class="ind-val">1 / 9</span></div>
+      <div class="ind-row"><span>Допуск до «системного» уровня<br><span class="ind-sub">индекс не может показать «системный крах», пока не подтверждён кредит + (структура или ликвидность)</span></span><span class="ind-val">закрыт</span></div>
+      
+    </div>
+    <div style="margin-top:12px;font-size:10.5px;color:var(--dim);line-height:1.5">
+      <b>Это не вероятность.</b> Score — взвешенная сумма эвристик (ликвидность/кредит/структура/потоки/макро). Нет калибровки по частотам событий.
+      <b>Почему не «всегда в кэш» при 65:</b> 2011, 2016, авг 2024 давали 55–75, но это были шок/коррекция, не системный крах.
+      Full cash на каждом таком сигнале уничтожает upside. Смотри <b>тип сигнала</b> и карточку «Действие портфеля».
+    </div></div>
   </div>
   <div class="panel" id="panelOpp">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Индекс возможности · детали</h3>
-    <div id="oppDetails"></div>
+    <div id="oppDetails">
+    <div class="engine-score" style="color:var(--dim)">40</div>
+    <div class="engine-label">Эвристический индекс возможности 0–100. Лучшие моменты — когда ликвидность разворачивается вверх, а рынок ещё слаб.</div>
+    <div style="margin-top:10px;font-size:12px;color:var(--dim);line-height:1.45">Сигнал растёт при: росте/стабилизации Net Liquidity + повышенной вероятности кризиса + структура ещё не «Здоровая».</div></div>
   </div>
   <div class="panel" id="panelLiq">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Движок ликвидности · 35%</h3>
-    <div id="liqDetails"></div>
+    <div id="liqDetails">
+    <div class="engine-score">47</div>
+    <div class="engine-label">Нейтрально · голос: Нейтрал</div>
+    
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>Чистая ликвидность<br><span class="ind-sub">сколько свободных денег в финансовой системе</span></span><span class="ind-val">$5.87T</span></div><div class="ind-hint" style="color:var(--dim)">Чуть ниже среднего, не критично</div>
+      <div class="ind-row"><span>Δ за 4 нед.<br><span class="ind-sub">приток/отток денег за последний месяц</span></span><span class="ind-val">+8 млрд</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>Баланс ФРС (WALCL)<br><span class="ind-sub">активы на балансе Центробанка США</span></span><span class="ind-val">6.76T</span></div>
+      <div class="ind-row"><span>TGA (казначейство)<br><span class="ind-sub">кэш правительства США — рост TGA изымает деньги из рынков</span></span><span class="ind-val">0.88T</span></div>
+      <div class="ind-row"><span>Обратное репо (RRP)<br><span class="ind-sub">деньги, «припаркованные» в ФРС и временно выведенные из оборота</span></span><span class="ind-val">0 млрд</span></div>
+      <div class="ind-row"><span>M2, изм. за 3 мес.<br><span class="ind-sub">рост общей денежной массы в экономике</span></span><span class="ind-val">5.7%</span></div><div class="ind-hint" style="color:var(--text)">Быстрый рост денежной массы в экономике</div>
+      <div class="ind-row"><span>ECB баланс, Δ4нед<br><span class="ind-sub">то же самое, но у Центробанка Европы</span></span><span class="ind-val">+0.6%</span></div><div class="ind-hint" style="color:var(--dim)">ЕЦБ почти не меняется</div>
+      <div class="ind-row"><span>BOJ баланс, Δ4нед<br><span class="ind-sub">то же самое, но у Центробанка Японии</span></span><span class="ind-val">-5.9%</span></div><div class="ind-hint" style="color:var(--red)">Банк Японии заметно сокращает баланс — деньги уходят из системы</div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «много ли свободных денег крутится в финансовой системе прямо сейчас». Больше денег → рынкам легче расти. Деньги уходят → рынкам становится тяжелее.</div></div>
   </div>
   <div class="panel" id="panelCredit">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Кредитный движок · 25%</h3>
-    <div id="creditDetails"></div>
+    <div id="creditDetails">
+    <div class="engine-score">46</div>
+    <div class="engine-label">Слабый · голос: Нейтрал</div>
+    
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>HY OAS (спреды)<br><span class="ind-sub">переплата за риск для «мусорных» облигаций сверх гособлигаций</span></span><span class="ind-val">3.23%</span></div><div class="ind-hint" style="color:var(--dim)">В норме</div>
+      <div class="ind-row"><span>HY Δ 5д<br><span class="ind-sub">насколько быстро эта переплата растёт за неделю</span></span><span class="ind-val">0.08</span></div><div class="ind-hint" style="color:var(--dim)">Без резких движений</div>
+      <div class="ind-row"><span>CCC OAS (дно junk)<br><span class="ind-sub">то же самое, но для самых слабых компаний</span></span><span class="ind-val">12.78% (0.26)</span></div><div class="ind-hint" style="color:var(--orange)">Заметное напряжение в нижнем сегменте мусорных облигаций</div>
+      <div class="ind-row"><span>BBB OAS (инвест-грейд)<br><span class="ind-sub">переплата даже у надёжных компаний</span></span><span class="ind-val">1.05%</span></div><div class="ind-hint" style="color:var(--text)">Инвестиционный грейд спокоен</div>
+      <div class="ind-row"><span>Просрочки CRE<br><span class="ind-sub">доля просроченных кредитов в коммерческой недвижимости</span></span><span class="ind-val">1.53%</span></div><div class="ind-hint" style="color:var(--orange)">Просрочки по коммерческой недвижимости растут выше нормы</div>
+      <div class="ind-row"><span>Просрочки ипотеки<br><span class="ind-sub">доля просроченных жилищных кредитов</span></span><span class="ind-val">1.86%</span></div><div class="ind-hint" style="color:var(--dim)">В пределах нормы</div>
+      <div class="ind-row"><span>Ужесточение кредитов (SLOOS)<br><span class="ind-sub">доля банков, которые стали строже выдавать кредиты</span></span><span class="ind-val">0</span></div><div class="ind-hint" style="color:var(--text)">Банки не ужесточают условия</div>
+      <div class="ind-row"><span>KRE за 3 мес.<br><span class="ind-sub">динамика акций региональных банков США</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «легко ли компаниям и банкам занимать деньги». Когда переплата за риск растёт, а банки закручивают гайки — это ранний признак того, что кредитный рынок ломается, что обычно бьёт по экономике с задержкой в несколько месяцев.</div></div>
   </div>
   <div class="panel" id="panelRegime">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Рыночный режим</h3>
-    <div id="regimeDetails"></div>
+    <div id="regimeDetails">
+    <div class="engine-score" style="font-size:18px">Рецессия</div>
+    <div class="engine-label" style="margin-top:8px;line-height:1.45">Макро указывает на сжатие активности.</div>
+    <div style="margin-top:12px;font-size:11px;color:var(--dim)">Возможные режимы: Risk-on · Поздний цикл · Пузырь · Коррекция · Медвежий рынок · Капитуляция · Восстановление · Рецессия · Нейтрально</div></div>
   </div>
   <div class="panel" id="panelBubble">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Детектор пузыря (эвристика)</h3>
-    <div id="bubbleDetails"></div>
+    <div id="bubbleDetails">
+    <div class="engine-score">30</div>
+    <div class="engine-label">Эвристика (не вероятность). Намеренно не использует VIX (ТЗ §5). Ищет рост рынка при падающей ликвидности + слабом кредите + узкой ширине + лидерстве мегакэпов (SPY vs RSP, QQQ vs IWM).</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>Рынок растёт</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Ликвидность уходит</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Кредит слабеет</span><span class="ind-val">✔</span></div>
+      <div class="ind-row"><span>Узкая ширина (% акций &gt;50DMA)</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Мегакэпы ведут (QQQ&gt;SPY)</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>SPY опережает RSP</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>QQQ опережает IWM</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Copper/Gold overheat</span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Copper/Gold recession</span><span class="ind-val">—</span></div>
+    </div></div>
   </div>
   <div class="panel" id="panelConf">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Согласованность и голоса</h3>
-    <div id="confDetails"></div>
+    <div id="confDetails">
+    <div class="engine-score">10%</div>
+    <div class="engine-label">Насколько можно доверять текущему показанию индекса прямо сейчас</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>Согласие движков<br><span class="ind-sub">насколько единодушны все 5 движков между собой</span></span><span class="ind-val">80%</span></div>
+      <div class="ind-row"><span>Покрытие данных<br><span class="ind-sub">сколько из нужных источников данных вообще получены</span></span><span class="ind-val">73%</span></div>
+      <div class="ind-row"><span>Свежесть данных<br><span class="ind-sub">насколько недавние (не устаревшие/не из кэша) данные использованы</span></span><span class="ind-val">15%</span></div>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--dim);line-height:1.45">
+      <b>Важно понимать:</b> это не «точность модели» и не означает, что индекс «прав в 10% случаев». Историческая точность нигде не измерялась — это просто честная оценка качества входных данных прямо сейчас: если движки спорят между собой, данных не хватает или они устарели — доверие к цифре ниже.
+      <br>Получено 10 из 18 ключевых источников данных.
+    </div></div>
   </div>
   <div class="panel" id="panelStructure">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Структура рынка · 15%</h3>
-    <div id="structureDetails"></div>
+    <div id="structureDetails">
+    <div class="engine-score">32</div>
+    <div class="engine-label">Здоровая · голос: Нейтрал</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>VIX (страх акций)<br><span class="ind-sub">насколько сильных колебаний рынок ждёт от акций</span></span><span class="ind-val">19.99 (5.1)</span></div><div class="ind-hint" style="color:var(--dim)">В норме</div>
+      <div class="ind-row"><span>MOVE (волатильность ставок)<br><span class="ind-sub">то же самое, но для рынка облигаций</span></span><span class="ind-val">85 </span></div><div class="ind-hint" style="color:var(--dim)">В норме</div>
+      <div class="ind-row"><span>VVIX<br><span class="ind-sub">насколько нестабилен сам индекс страха VIX</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Ширина рынка<br><span class="ind-sub">% акций S&amp;P 500 выше своей 50-дневной средней — растёт ли рынок широко или только за счёт немногих</span></span><span class="ind-val">55%</span></div><div class="ind-hint" style="color:var(--dim)">Умеренное участие</div>
+      <div class="ind-row"><span>VIX term structure<br><span class="ind-sub">сравнение страха «прямо сейчас» и страха «через 3 мес.»</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Put/Call<br><span class="ind-sub">сколько ставок на падение по сравнению со ставками на рост</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Новые макс. − мин.<br><span class="ind-sub">баланс акций у годового максимума против годового минимума</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>SPY vs RSP<br><span class="ind-sub">крупные компании обгоняют средние — рынок держится на немногих</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «насколько рынок акций и облигаций нервничает прямо сейчас, и насколько широко распределён рост». Скачок страха сам по себе — ещё не кризис, но резкий и одновременный рост по нескольким строкам сразу — важный сигнал.</div></div>
   </div>
   <div class="panel" id="panelFlow">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Потоки капитала · 15%</h3>
-    <div id="flowDetails"></div>
+    <div id="flowDetails">
+    <div class="engine-score">38</div>
+    <div class="engine-label">Нейтрально · голос: Нейтрал</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>USD/JPY<br><span class="ind-sub">курс доллара к иене — маркер «керри-трейда» (займы в дешёвой иене)</span></span><span class="ind-val">158 </span></div><div class="ind-hint" style="color:var(--dim)">В спокойной зоне</div>
+      <div class="ind-row"><span>DXY (индекс доллара)<br><span class="ind-sub">сила доллара к корзине валют</span></span><span class="ind-val">101.79 </span></div><div class="ind-hint" style="color:var(--dim)">В спокойной зоне</div>
+      <div class="ind-row"><span>Фандинг BTC<br><span class="ind-sub">кто платит комиссию на срочном рынке биткоина — лонги или шорты</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Стейблкоины за 7д<br><span class="ind-sub">приток/отток денег в крипторынок</span></span><span class="ind-val">-0.16%</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>Золото / SPY за 1 мес.<br><span class="ind-sub">бегут ли деньги из акций в защитное золото</span></span><span class="ind-val">— / —</span></div>
+      <div class="ind-row"><span>Нефть за 1 мес.<br><span class="ind-sub">резкие движения — сигнал о спросе/шоке предложения</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Медь за 3 мес. (Dr. Copper)<br><span class="ind-sub">медь считается барометром реальной экономики</span></span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Copper/Gold ratio<br><span class="ind-sub">промышленный спрос (медь) против защитного актива (золото)</span></span><span class="ind-val">— </span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Copper vs Gold gap (3м)<br><span class="ind-sub">разрыв в динамике меди и золота за квартал</span></span><span class="ind-val">—</span></div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «куда сейчас перетекают деньги в мире» — в защитные активы (страх) или в рискованные (жадность), и не назревает ли проблема в керри-трейде на иене.</div></div>
   </div>
   <div class="panel" id="panelMacro">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Макро-движок · 10%</h3>
-    <div id="macroDetails"></div>
+    <div id="macroDetails">
+    <div class="engine-score">25</div>
+    <div class="engine-label">Рецессия · голос: Крах</div>
+    <div style="margin-top:10px">
+      <div class="ind-row"><span>Первичные заявки по безработице<br><span class="ind-sub">сколько новых людей встало на учёт по безработице за неделю</span></span><span class="ind-val">199000 Δ1000</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>Начало строительства жилья<br><span class="ind-sub">сколько новых домов начали строить — уровень, тыс. в год</span></span><span class="ind-val">1275</span></div>
+      <div class="ind-row"><span>Housing starts, Δ<br><span class="ind-sub">изменение строительства жилья — реально двигает этот движок</span></span><span class="ind-val">-34%</span></div><div class="ind-hint" style="color:var(--red)">Стройка резко тормозит — ранний признак охлаждения экономики</div>
+      <div class="ind-row"><span>Разрешения на строительство, Δ<br><span class="ind-sub">опережает начало строительства на 1–2 мес.</span></span><span class="ind-val">-2.1%</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>New Orders (Durable Goods), Δ<br><span class="ind-sub">заказы на дорогие товары длительного пользования — прокси инвестиций бизнеса</span></span><span class="ind-val">-0.1%</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>Временная занятость, Δ3мес<br><span class="ind-sub">первой сокращают временный персонал — ранний сигнал по рынку труда</span></span><span class="ind-val">-0.8%</span></div><div class="ind-hint" style="color:var(--dim)">Без выраженного тренда</div>
+      <div class="ind-row"><span>Baltic Dry, уровень<br><span class="ind-sub">стоимость морских грузоперевозок — прокси мировой торговли</span></span><span class="ind-val">—</span></div>
+      <div class="ind-row"><span>Baltic Dry, Δ<br><span class="ind-sub">изменение — реально двигает этот движок</span></span><span class="ind-val">—</span></div><div class="ind-hint" style="color:var(--dim)">Нет данных</div>
+      <div class="ind-row"><span>Copper/Gold ratio<br><span class="ind-sub">справочно, на итоговый score макро-движка не влияет</span></span><span class="ind-val">— </span></div>
+      <div class="ind-row"><span>Copper vs Gold (3м)</span><span class="ind-val">медь —% / золото —%</span></div>
+    </div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--dim);line-height:1.45">Простыми словами: этот блок отвечает на вопрос «замедляется реальная экономика или нет». Раньше в этой панели не показывались строки «Housing starts, Δ» и «Baltic Dry, Δ» — а именно они, наряду с заявками по безработице, formируют итоговый score. Теперь видно всё, что реально влияет на цифру.</div></div>
   </div>
   <div class="panel" id="panelDiag">
-    <span class="close-panel" data-close>×</span>
+    <span class="close-panel" data-close="">×</span>
     <h3>Диагностика источников · реальное время</h3>
-    <div class="mini mono" id="diagSummary" style="margin-bottom:8px;color:var(--dim)">—</div>
-    <div id="diagRows"></div>
+    <div class="mini mono" id="diagSummary" style="margin-bottom:8px;color:var(--dim)">5/24 живых в этом цикле, 19 ещё идёт</div>
+    <div id="diagRows"><div class="diag-row"><span class="diag-dot" style="background:#111111"></span><span class="diag-name">VIX</span><span class="diag-meta">обновлено 10с назад · 1372мс</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">MOVE</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">VVIX</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Net Liquidity (Fed)</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">M2</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">HY OAS</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot" style="background:#111111"></span><span class="diag-name">CRE/ипотека delinquency</span><span class="diag-meta">обновлено 5с назад · 7001мс</span></div><div class="diag-row"><span class="diag-dot" style="background:#111111"></span><span class="diag-name">SLOOS</span><span class="diag-meta">обновлено 5с назад · 7001мс</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">KRE (regional banks)</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot" style="background:#111111"></span><span class="diag-name">FX / DXY</span><span class="diag-meta">обновлено 11с назад · 564мс</span></div><div class="diag-row"><span class="diag-dot" style="background:#111111"></span><span class="diag-name">Crypto (Binance/CG/Llama)</span><span class="diag-meta">обновлено 10с назад · 1103мс</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Market Breadth (S&amp;P sample)</span><span class="diag-meta">идёт 12с · &gt;36с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Commodities (GLD/TLT/oil)</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Macro (claims/housing)</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Baltic Dry</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">CCC OAS</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">BBB OAS</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">ECB/BOJ balance sheets</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Put/Call ratio</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">VIX term structure</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Permits/Durables/Temp</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Narrowness RSP/IWM</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Copper</span><span class="diag-meta">идёт 12с · &gt;26с</span></div><div class="diag-row"><span class="diag-dot pending" style="background:#b3b3b3"></span><span class="diag-name">Gold</span><span class="diag-meta">идёт 12с · &gt;26с</span></div></div>
     <div class="mini" style="margin-top:10px;color:var(--dim);line-height:1.4">🟢 живой в этом цикле · ⚪ ещё не завершился/не было · 🔴 таймаут или ошибка. У каждого источника жёсткий лимит времени, поэтому один зависший провайдер больше не может остановить весь цикл.</div>
   </div>
 
   <div class="section-title">Движки</div>
   <div class="grid2">
-    <div class="card" data-panel="panelStructure"><div class="eyebrow">Структура</div><div class="val mono" id="structTrend">—</div></div>
-    <div class="card" data-panel="panelFlow"><div class="eyebrow">Потоки капитала</div><div class="val mono" id="flowTrend">—</div></div>
+    <div class="card" data-panel="panelStructure"><div class="eyebrow">Структура</div><div class="val mono" id="structTrend">Здоровая</div></div>
+    <div class="card" data-panel="panelFlow"><div class="eyebrow">Потоки капитала</div><div class="val mono" id="flowTrend">Нейтрально</div></div>
   </div>
-  <div class="card" data-panel="panelMacro" style="margin-bottom:10px"><div class="eyebrow">Макро</div><div class="val mono" id="macroTrend">—</div></div>
+  <div class="card" data-panel="panelMacro" style="margin-bottom:10px"><div class="eyebrow">Макро</div><div class="val mono" id="macroTrend">Рецессия</div></div>
 
   <div class="section-title">История</div>
   <div class="hist-tabs" id="histTabs">
@@ -246,18 +369,42 @@
     <button class="hist-tab" data-days="365">365д</button>
   </div>
   <div class="section-title" style="margin:14px 0 4px;font-size:9px">Crisis Probability</div>
-  <div class="chart-box" style="height:64px"><canvas id="chartCrisis"></canvas></div>
+  <div class="chart-box" style="height:64px"><canvas id="chartCrisis" width="492" height="64"></canvas></div>
   <div class="section-title" style="margin:10px 0 4px;font-size:9px">Liquidity</div>
-  <div class="chart-box" style="height:52px"><canvas id="chartLiq"></canvas></div>
+  <div class="chart-box" style="height:52px"><canvas id="chartLiq" width="492" height="52"></canvas></div>
   <div class="section-title" style="margin:10px 0 4px;font-size:9px">Credit Stress</div>
-  <div class="chart-box" style="height:52px"><canvas id="chartCredit"></canvas></div>
+  <div class="chart-box" style="height:52px"><canvas id="chartCredit" width="492" height="52"></canvas></div>
   <div class="section-title" style="margin:10px 0 4px;font-size:9px">Bubble Probability</div>
-  <div class="chart-box" style="height:52px"><canvas id="chartBubble"></canvas></div>
+  <div class="chart-box" style="height:52px"><canvas id="chartBubble" width="492" height="52"></canvas></div>
   <div class="section-title" style="margin:10px 0 4px;font-size:9px">Opportunity Probability</div>
-  <div class="chart-box" style="height:52px"><canvas id="chartOpp"></canvas></div>
-  <div class="history-list" id="historyList"></div>
+  <div class="chart-box" style="height:52px"><canvas id="chartOpp" width="492" height="52"></canvas></div>
+  <div class="history-list" id="historyList"><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:45</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:40</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:33</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:33</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:28</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div><div class="history-row"><div class="history-dot" style="background:#444444"></div>
+      <div style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim)">18.10, 22:28</div>
+      <div class="mono" style="color:#444444;font-weight:600">57%</div>
+      <div class="mono" style="color:var(--dim);font-size:10px;margin-left:8px">L47 C46</div>
+    </div></div>
 
-  <div class="pwa-hint" id="pwaHint">📱 Добавь на главный экран: Safari → «Поделиться» → «На экран Домой»; Chrome → «Установить приложение»</div>
+  <div class="pwa-hint show" id="pwaHint">📱 Добавь на главный экран: Safari → «Поделиться» → «На экран Домой»; Chrome → «Установить приложение»</div>
   <div class="scope">
     Глобальная ликвидность и индекс стресса v2.3 · эвристика, не фин. рекомендация.<br>
     Движки: Ликвидность 35% (Fed+ECB+BOJ+M2) · Кредит 25% (HY+CCC+BBB+SLOOS+CRE/ипотека+KRE) · Структура 15% (VIX+MOVE+VVIX+term structure+put/call+breadth+narrowness) · Потоки 15% (JPY/DXY/золото/медь/нефть/крипто) · Макро 10% (claims+permits+durables+temp help+Baltic Dry).<br>
@@ -266,7 +413,7 @@
     85%+ только при кредите + структуре/ликвидности. Голый VIX-шок → потолок ~72%.<br>
     Бэктест: 2008/2020 системный; 2018/2022 grind; 2011/2024 шок; 2009 opportunity.<br>
     Источники (все бесплатные, без ключей): FRED, Yahoo Finance, CBOE, GitHub datasets/s-and-p-500-companies (список тикеров), open FX API, Binance, CoinGecko, DefiLlama.<br>
-    Ширина рынка = % акций S&P 500 (выборка ~180 тикеров) выше своей 50-дневной SMA, считается напрямую по дневным свечам Yahoo v8 (без Invalid Crumb — этот эндпойнт не требует сессии, в отличие от v7); новые макс./мин. = доля акций у 52-нед. хая минус доля у 52-нед. лоя. put/call = сначала живые цепочки опционов SPY+QQQ+IWM (Yahoo v7), при недоступности — официальный Total P/C Ratio CBOE (CSV, без ключа). CNN Fear&Greed не используется.<br>
+    Ширина рынка = % акций S&amp;P 500 (выборка ~180 тикеров) выше своей 50-дневной SMA, считается напрямую по дневным свечам Yahoo v8 (без Invalid Crumb — этот эндпойнт не требует сессии, в отличие от v7); новые макс./мин. = доля акций у 52-нед. хая минус доля у 52-нед. лоя. put/call = сначала живые цепочки опционов SPY+QQQ+IWM (Yahoo v7), при недоступности — официальный Total P/C Ratio CBOE (CSV, без ключа). CNN Fear&amp;Greed не используется.<br>
     Net Liquidity пороги — номинальные (трлн $), требуют пересмотра раз в 1-2 года по мере роста баланса ФРС.<br>
     🟢 актуально · 🟡 скоро · 🔴 устарело. Кэш + резервы при отказе API.
   </div>
@@ -274,7 +421,7 @@
 
 <script>
 /* ============================================================
-   Global Liquidity & Crisis Stress Index Engine v2.3
+   Global Liquidity & Crisis Stress Index Engine v2.10 (fix: proxy circuit breaker, breadth threshold, Stooq/options off)
    ============================================================ */
 
 const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:0.10 };
@@ -296,7 +443,7 @@ const PROXY_BUILDERS=[
   u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
   u=>`https://proxy.killcors.com/?url=${encodeURIComponent(u)}`,
 ];
-let _lastGoodProxy=0, _activeProxy=0; const MAX_CONCURRENT=4; const _proxyQueue=[];
+let _lastGoodProxy=0, _activeProxy=0; const MAX_CONCURRENT=6; const _proxyQueue=[];
 /* v2.5: circuit breaker — если прокси подряд облажался 2 раза, он "глохнет" на несколько минут
    и мы перестаём его пробовать (вместо того чтобы на КАЖДОМ из ~20 источников заново ждать его
    таймаут). Именно отсутствие этого механизма и было причиной многоминутных зависаний: когда все
@@ -332,6 +479,7 @@ async function tryOneProxy(idx,cleanTarget,asText,timeout){
   try{ r=await fetchWithTimeout(url,{cache:'no-store'},timeout) }
   catch(e){ proxyBad(idx); throw e }
   if(r.status===429){ proxyOk(idx); throw new Error('upstream 429 (rate-limited)') }
+  if(r.status>=400&&r.status<500){ proxyOk(idx); const ue=new Error('upstream '+r.status); ue.upstream=true; throw ue }
   if(!r.ok){ proxyBad(idx); throw new Error('status '+r.status) }
   let data;
   try{ data=asText?await r.text():await r.json() }
@@ -341,7 +489,7 @@ async function tryOneProxy(idx,cleanTarget,asText,timeout){
   return data;
 }
 async function tryDirectFetch(targetUrl,asText,timeout){try{const sep=targetUrl.includes('?')?'&':'?';const url=targetUrl+sep+'_cb='+Date.now();const r=await fetchWithTimeout(url,{cache:'no-store',mode:'cors'},timeout);if(!r.ok)return null;const data=asText?await r.text():await r.json();if(!isValidProxyBody(data,asText))return null;return data}catch(e){return null}}
-async function fetchViaProxies(targetUrl,key,{asText=false,maxTries=3,timeout=11000}={}){return runQueued(async()=>{const order=orderProxies(Math.min(maxTries+1,PROXY_BUILDERS.length));const cleanTarget=targetUrl+(targetUrl.includes('?')?'&':'?')+'_cb='+Date.now();const raceN=Math.min(2,order.length);const raceResult=await new Promise(resolve=>{let left=raceN,done=false;if(raceN===0){resolve(null);return}for(let i=0;i<raceN;i++){const idx=order[i];tryOneProxy(idx,cleanTarget,asText,timeout).then(data=>{if(!done){done=true;_lastGoodProxy=idx;resolve(data)}}).catch(()=>{left--;if(left===0&&!done)resolve(null)})}});if(raceResult!=null)return raceResult;for(let i=raceN;i<order.length;i++){try{await sleep(150+Math.random()*250);const data=await tryOneProxy(order[i],cleanTarget,asText,timeout);_lastGoodProxy=order[i];return data}catch(_){}}return null})}
+async function fetchViaProxies(targetUrl,key,{asText=false,maxTries=3,timeout=11000}={}){return runQueued(async()=>{const order=orderProxies(Math.min(maxTries+1,PROXY_BUILDERS.length));const cleanTarget=targetUrl+(targetUrl.includes('?')?'&':'?')+'_cb='+Date.now();const raceN=Math.min(2,order.length);let upstreamFail=false;const raceResult=await new Promise(resolve=>{let left=raceN,done=false;if(raceN===0){resolve(null);return}for(let i=0;i<raceN;i++){const idx=order[i];tryOneProxy(idx,cleanTarget,asText,timeout).then(data=>{if(!done){done=true;_lastGoodProxy=idx;resolve(data)}}).catch(e=>{if(e&&e.upstream)upstreamFail=true;left--;if(left===0&&!done)resolve(null)})}});if(raceResult!=null)return raceResult;if(upstreamFail)return null;for(let i=raceN;i<order.length;i++){try{await sleep(150+Math.random()*250);const data=await tryOneProxy(order[i],cleanTarget,asText,timeout);_lastGoodProxy=order[i];return data}catch(e){if(e&&e.upstream)return null}}return null})}
 /* v2.7: раньше ~24 источника + до 80 тикеров breadth стреляли в Yahoo почти одновременно
    через ОДИН постоянный IP прокси — Yahoo это видит как явный скрейпинг и банит 429-ми.
    Публичные прокси этого не показывали просто потому что до Yahoo вообще не достукивались.
@@ -362,7 +510,7 @@ function makeRateGate(minGapMs){
 const yahooGate=makeRateGate(220);
 async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,directTimeout=4500}={}){
   if(targetUrl.includes('finance.yahoo.com'))await yahooGate();
-  const direct=await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
+  const direct=/finance\.yahoo\.com|fred\.stlouisfed\.org|stooq\.com/.test(targetUrl)?null:await tryDirectFetch(targetUrl,asText,directTimeout);if(direct!=null)return direct;return await fetchViaProxies(targetUrl,key,{asText,maxTries,timeout})}
 
 /* ---------- v2.4: live per-source diagnostics + watchdog ----------
    Раньше один зависший источник (чаще всего fetchBreadth — до 180 тикеров через общую
@@ -373,8 +521,8 @@ async function fetchSmart(targetUrl,key,{asText=false,maxTries=3,timeout=10000,d
    выполнятся вообще все 24 источника. guarded() ниже даёт каждому источнику жёсткий предел
    времени и пишет его текущий статус в DIAG в реальном времени, не дожидаясь конца всего
    цикла. */
-const DIAG_TIMEOUT_MS=26000;
-const DIAG_TIMEOUT_BREADTH_MS=36000;
+const DIAG_TIMEOUT_MS=45000;
+const DIAG_TIMEOUT_BREADTH_MS=80000;
 /* v2.5: подняты с 22/32с — при действительно мёртвых прокси (см. circuit breaker выше)
    fetchSmart всё равно честно проходит direct + гонку 2 прокси + до 2 последовательных
    попыток, прежде чем сдаться; 22с иногда обрезали это раньше, чем прокси-слой успевал
@@ -459,7 +607,7 @@ function renderHeartbeat(){
   if(!dot||!txt)return;
   if(cycleRunning){
     const elapsed=now-cycleStartedAt;
-    const stuck=elapsed>50000;
+    const stuck=elapsed>100000;
     dot.className='hb-dot'+(stuck?'':' pending');
     dot.style.background=stuck?'#e2001a':'#999999';
     txt.textContent=stuck?`⚠ цикл идёт уже ${fmtAge(elapsed)} — часть источников подвисла, смотри диагностику`:`обновляю данные… ${fmtAge(elapsed)}`;
@@ -489,7 +637,9 @@ async function fetchFred(seriesId,days=120){const [direct,csv]=await Promise.all
    покрытии, и это единственный встретившийся вариант без него). ВАЖНО: добавь "stooq.com"
    в ALLOWED_HOSTS своего прокси (cors-proxy-valtown-simple.js / cors-proxy-worker.js) и
    передеплой — иначе прокси будет отдавать 403 на эти запросы. */
+const STOOQ_ENABLED=false; // поставь true после добавления stooq.com в ALLOWED_HOSTS прокси и передеплоя
 async function stooqDaily(symbol){
+  if(!STOOQ_ENABLED)return null;
   try{
     const url=`https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
     const txt=await fetchSmart(url,'stooq_'+symbol,{asText:true,maxTries:2,timeout:9000,directTimeout:3500});
@@ -659,7 +809,7 @@ async function fetchBreadth(){
         else if(s.price<=s.lo52*1.02)nearLow++;
       }
     }
-    if(total>=60){
+    if(total>=30){
       const pct=Math.round((above/total)*100);
       const nearHighPct=hlTotal?Math.round((nearHigh/hlTotal)*100):null;
       const nearLowPct=hlTotal?Math.round((nearLow/hlTotal)*100):null;
@@ -739,7 +889,7 @@ async function fetchYahooOptionsVolume(symbol){
   return null;
 }
 async function fetchPutCallRatio(){
-  const [spy,qqq,iwm]=await Promise.all([fetchYahooOptionsVolume('SPY'),fetchYahooOptionsVolume('QQQ'),fetchYahooOptionsVolume('IWM')]);
+  const spy=null,qqq=null,iwm=null; // v2.10: Yahoo options требует crumb -> всегда 401, ветка отключена
   const items=[spy,qqq,iwm].filter(Boolean);
   if(items.length){
     const totalCall=items.reduce((a,x)=>a+x.callVol,0);
@@ -761,7 +911,7 @@ async function fetchPutCallRatio(){
         const pcr=parseFloat(last[1]);
         const dateParts=last[0].split('/');
         const obsDate=dateParts.length===3?`${dateParts[2]}-${dateParts[0].padStart(2,'0')}-${dateParts[1].padStart(2,'0')}`:null;
-        if(!isNaN(pcr))return {pcr,obsDate,source:'CBOE Total P/C Ratio (офиц. архив)',updateType:'Daily'};
+        if(!isNaN(pcr)&&obsDate&&(Date.now()-new Date(obsDate+'T12:00:00Z').getTime())<14*86400000)return {pcr,obsDate,source:'CBOE Total P/C Ratio (офиц. архив)',updateType:'Daily'};
       }
     }
   }catch(e){}
@@ -1823,5 +1973,6 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
   fetchOpenSources();
 })();
 </script>
-</body>
-</html>
+
+
+</body></html>
