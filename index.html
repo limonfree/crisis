@@ -637,7 +637,7 @@ async function fetchFred(seriesId,days=120){const [direct,csv]=await Promise.all
    покрытии, и это единственный встретившийся вариант без него). ВАЖНО: добавь "stooq.com"
    в ALLOWED_HOSTS своего прокси (cors-proxy-valtown-simple.js / cors-proxy-worker.js) и
    передеплой — иначе прокси будет отдавать 403 на эти запросы. */
-const STOOQ_ENABLED=false; // поставь true после добавления stooq.com в ALLOWED_HOSTS прокси и передеплоя
+const STOOQ_ENABLED=true; // поставь true после добавления stooq.com в ALLOWED_HOSTS прокси и передеплоя
 async function stooqDaily(symbol){
   if(!STOOQ_ENABLED)return null;
   try{
