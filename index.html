@@ -279,16 +279,13 @@
 const WEIGHTS = { liquidity:0.35, credit:0.25, structure:0.15, flow:0.15, macro:0.10 };
 
 /* ---------- Anti-ban / fetch layer (from v1, kept) ---------- */
-/* v2.5: диагностика (см. панель "Источники") показала 0/21 живых Yahoo/FRED-источников —
-   ВСЕ 4 публичных CORS-прокси одновременно не отвечали. Это ожидаемо: бесплатные прокси без
-   SLA дохнут/банятся/переходят на платный тариф без предупреждения (corsproxy.io в 2026 стал
-   коммерческим продуктом с лендингом и, судя по всему, обрезал бесплатный доступ). Добавлены
-   ещё 2 независимых бесплатных прокси (thingproxy, corsfix) — просто больше кандидатов в
-   ротации, деплоить ничего не надо. Самый надёжный фикс — собственный прокси: если он у тебя
-   есть, впиши URL в MY_CORS_PROXY ниже (см. файл cors-proxy-worker.js рядом — опционально,
-   деплоится за 5 минут на Cloudflare, бесплатно), он будет пробоваться первым. Пока пусто —
-   работает только на публичных прокси. */
-const MY_CORS_PROXY=''; // опционально: 'https://your-worker-name.your-subdomain.workers.dev/?url='
+/* v2.6: диагностика (см. панель "Источники") показала, что ВСЕ публичные CORS-прокси
+   (включая thingproxy/corsfix ниже) возвращали ответ без заголовка Access-Control-Allow-Origin —
+   похоже, Yahoo/FRED банят их IP-диапазоны как известную прокси-инфраструктуру. Поднят
+   собственный прокси на Val Town (см. cors-proxy-valtown-simple.js, альтернатива —
+   cors-proxy-worker.js для Cloudflare) — он не в банлисте, т.к. это обычная облачная
+   инфраструктура, не узнаваемый публичный прокси. Пробуется первым, до публичных резервов. */
+const MY_CORS_PROXY='https://limonfree--9fcb8b30cacf11f1a6b71607ee4eb77e.web.val.run/?url=';
 const PROXY_BUILDERS=[
   ...(MY_CORS_PROXY?[u=>MY_CORS_PROXY+encodeURIComponent(u)]:[]),
   u=>`https://thingproxy.freeboard.io/fetch/${u}`,
