@@ -479,19 +479,87 @@ async function fetchFredSeriesDirect(seriesId,days=120){try{const end=new Date()
 async function fetchFredCsv(seriesId){const txt=await fetchSmart(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,'fred_'+seriesId,{asText:true,maxTries:3,timeout:11000,directTimeout:4500});if(!txt||typeof txt!=='string')return [];const lines=txt.trim().split('\n').filter(l=>l&&!/^DATE/i.test(l)&&!/^observation/i.test(l));const pts=[];for(const line of lines){const parts=line.split(',');const val=parseFloat(parts[1]);if(!isNaN(val))pts.push({date:parts[0],val})}return pts}
 async function fetchFred(seriesId,days=120){const [direct,csv]=await Promise.all([fetchFredSeriesDirect(seriesId,days),fetchFredCsv(seriesId)]);const pts=(direct&&direct.length>=(csv?.length||0))?direct:csv;return pts?.length?pts:null}
 
+/* ---------- v2.9: Stooq — второй независимый источник тикеров/индексов/фьючерсов ----------
+   Бесплатно, без ключа, простой CSV. Используется НЕ вместо Yahoo, а В ГОНКЕ с ним
+   (firstOk ниже) — чей ответ пришёл раньше и успешно, тот и используется. Это даёт
+   независимость от бана конкретно Yahoo по IP: если забанен только Yahoo, Stooq почти
+   наверняка отработает. us-тикеры (ETF/акции) — формат "symbol.us", индексы — "^symbol",
+   непрерывные фьючерсы — "symbol.f" (это стандартные обозначения Stooq; если конкретный
+   инструмент всё равно останется красным в диагностике — вероятно, его просто нет в их
+   покрытии, и это единственный встретившийся вариант без него). ВАЖНО: добавь "stooq.com"
+   в ALLOWED_HOSTS своего прокси (cors-proxy-valtown-simple.js / cors-proxy-worker.js) и
+   передеплой — иначе прокси будет отдавать 403 на эти запросы. */
+async function stooqDaily(symbol){
+  try{
+    const url=`https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
+    const txt=await fetchSmart(url,'stooq_'+symbol,{asText:true,maxTries:2,timeout:9000,directTimeout:3500});
+    if(!txt||typeof txt!=='string')return null;
+    const lines=txt.trim().split(/\r?\n/);
+    if(lines.length<2)return null;
+    const rows=lines.slice(1).map(l=>l.split(',')).filter(p=>p.length>=5&&p[4]&&!isNaN(parseFloat(p[4])));
+    if(!rows.length)return null;
+    const closes=rows.map(p=>parseFloat(p[4]));
+    const price=closes[closes.length-1];
+    if(!(price>0))return null;
+    return {price,closes,source:`Stooq ${symbol}`};
+  }catch(e){return null}
+}
+/* Гонка нескольких источников: берём первый, кто успешно (не null) ответил; остальные
+   просто игнорируются, когда прилетят (их уже никто не ждёт). Раньше, например, fetchVIX
+   сперва ПОЛНОСТЬЮ пытался через Yahoo (до ~4 последовательных попыток) и только потом
+   шёл в резерв CBOE/FRED — к этому моменту таймаут guarded() уже почти истекал, и рабочий
+   резерв не успевал отработать. firstOk убирает эту потерю времени. */
+function firstOk(fns){
+  return new Promise(resolve=>{
+    let remaining=fns.length,settled=false;
+    if(!remaining){resolve(null);return}
+    fns.forEach(fn=>{
+      Promise.resolve().then(fn).then(v=>{
+        remaining--;
+        if(!settled&&v!=null){settled=true;resolve(v)}
+        else if(remaining===0&&!settled){settled=true;resolve(null)}
+      }).catch(()=>{
+        remaining--;
+        if(remaining===0&&!settled){settled=true;resolve(null)}
+      });
+    });
+  });
+}
+
 /* ---------- Individual fetchers ---------- */
-async function fetchVIX(){const y=await yahooChart('^VIX','1d','1m');if(y?.price){let chg5=null;if(y.meta?.previousClose)chg5=Math.round((y.price-y.meta.previousClose)*10)/10;else if(y.closes?.length>=2)chg5=Math.round((y.price-y.closes[0])*10)/10;return {price:Math.round(y.price*100)/100,chg5,source:y.source,updateType:'Live'}}const [cboe,fred]=await Promise.all([
-  (async()=>{try{const txt=await fetchSmart('https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv','cboe',{asText:true,maxTries:2,timeout:9000});if(!txt)return null;const lines=txt.trim().split(/\r?\n/).filter(l=>l&&!/DATE|OPEN/i.test(l));if(lines.length<2)return null;const last=lines[lines.length-1].split(',');const close=parseFloat(last[4]??last[1]);if(isNaN(close))return null;let chg5=null;if(lines.length>=6){const prev=parseFloat(lines[lines.length-6].split(',')[4]??lines[lines.length-6].split(',')[1]);if(!isNaN(prev))chg5=Math.round((close-prev)*10)/10}return {price:Math.round(close*100)/100,chg5,source:'CBOE',updateType:'Daily'}}catch(e){return null}})(),
-  (async()=>{const pts=await fetchFred('VIXCLS',30);if(!pts?.length)return null;const last=pts[pts.length-1];let chg5=null;if(pts.length>=6)chg5=Math.round((last.val-pts[pts.length-6].val)*10)/10;return {price:Math.round(last.val*100)/100,chg5,source:'FRED VIXCLS',updateType:'Daily'}})()
-]);return cboe||fred||null}
-async function fetchMOVE(){const y=await yahooChart('^MOVE','5d','1d');if(y?.price){let chg5=null;if(y.closes?.length>=2)chg5=Math.round((y.price-y.closes[0])*10)/10;return {price:Math.round(y.price*10)/10,chg5,source:y.source,updateType:'Live'}}const tlt=await yahooChart('TLT','2mo','1d');if(tlt?.closes?.length>=21){const closes=tlt.closes.filter(x=>x!=null);const rets=[];for(let i=closes.length-20;i<closes.length;i++)if(i>0&&closes[i-1]>0)rets.push(Math.log(closes[i]/closes[i-1]));if(rets.length>=10){const mean=rets.reduce((a,b)=>a+b,0)/rets.length;const variance=rets.reduce((a,b)=>a+Math.pow(b-mean,2),0)/(rets.length-1);const annVol=Math.sqrt(variance)*Math.sqrt(252)*100;return {price:Math.round(Math.max(50,Math.min(220,annVol*6.5))),chg5:null,source:'TLT vol proxy',updateType:'Daily'}}}return null}
-async function fetchVVIX(){const y=await yahooChart('^VVIX','5d','1d');if(y?.price)return {price:Math.round(y.price*10)/10,source:y.source,updateType:'Live'};return null}
+async function fetchVIX(){
+  return await firstOk([
+    async()=>{const y=await yahooChart('^VIX','1d','1m');if(!y?.price)return null;let chg5=null;if(y.meta?.previousClose)chg5=Math.round((y.price-y.meta.previousClose)*10)/10;else if(y.closes?.length>=2)chg5=Math.round((y.price-y.closes[0])*10)/10;return {price:Math.round(y.price*100)/100,chg5,source:y.source,updateType:'Live'}},
+    async()=>{try{const txt=await fetchSmart('https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv','cboe',{asText:true,maxTries:2,timeout:9000});if(!txt)return null;const lines=txt.trim().split(/\r?\n/).filter(l=>l&&!/DATE|OPEN/i.test(l));if(lines.length<2)return null;const last=lines[lines.length-1].split(',');const close=parseFloat(last[4]??last[1]);if(isNaN(close))return null;let chg5=null;if(lines.length>=6){const prev=parseFloat(lines[lines.length-6].split(',')[4]??lines[lines.length-6].split(',')[1]);if(!isNaN(prev))chg5=Math.round((close-prev)*10)/10}return {price:Math.round(close*100)/100,chg5,source:'CBOE',updateType:'Daily'}}catch(e){return null}},
+    async()=>{const pts=await fetchFred('VIXCLS',30);if(!pts?.length)return null;const last=pts[pts.length-1];let chg5=null;if(pts.length>=6)chg5=Math.round((last.val-pts[pts.length-6].val)*10)/10;return {price:Math.round(last.val*100)/100,chg5,source:'FRED VIXCLS',updateType:'Daily'}},
+    async()=>{const s=await stooqDaily('^vix');if(!s?.price)return null;let chg5=null;if(s.closes?.length>=6)chg5=Math.round((s.price-s.closes[s.closes.length-6])*10)/10;return {price:Math.round(s.price*100)/100,chg5,source:s.source,updateType:'Daily'}}
+  ]);
+}
+async function fetchMOVE(){
+  const tltVol=closes=>{const c=closes.filter(x=>x!=null);if(c.length<21)return null;const rets=[];for(let i=c.length-20;i<c.length;i++)if(i>0&&c[i-1]>0)rets.push(Math.log(c[i]/c[i-1]));if(rets.length<10)return null;const mean=rets.reduce((a,b)=>a+b,0)/rets.length;const variance=rets.reduce((a,b)=>a+Math.pow(b-mean,2),0)/(rets.length-1);const annVol=Math.sqrt(variance)*Math.sqrt(252)*100;return Math.round(Math.max(50,Math.min(220,annVol*6.5)))};
+  return await firstOk([
+    async()=>{const y=await yahooChart('^MOVE','5d','1d');if(!y?.price)return null;let chg5=null;if(y.closes?.length>=2)chg5=Math.round((y.price-y.closes[0])*10)/10;return {price:Math.round(y.price*10)/10,chg5,source:y.source,updateType:'Live'}},
+    async()=>{const tlt=await yahooChart('TLT','2mo','1d');if(!tlt?.closes?.length)return null;const v=tltVol(tlt.closes);return v?{price:v,chg5:null,source:'TLT vol proxy (Yahoo)',updateType:'Daily'}:null},
+    async()=>{const tlt=await stooqDaily('tlt.us');if(!tlt?.closes?.length)return null;const v=tltVol(tlt.closes);return v?{price:v,chg5:null,source:'TLT vol proxy (Stooq)',updateType:'Daily'}:null}
+  ]);
+}
+async function fetchVVIX(){
+  return await firstOk([
+    async()=>{const y=await yahooChart('^VVIX','5d','1d');return y?.price?{price:Math.round(y.price*10)/10,source:y.source,updateType:'Live'}:null},
+    async()=>{const s=await stooqDaily('^vvix');return s?.price?{price:Math.round(s.price*10)/10,source:s.source,updateType:'Daily'}:null}
+  ]);
+}
 async function fetchNetLiquidity(){const [walcl,tga,rrp]=await Promise.all([fetchFred('WALCL',90),fetchFred('WTREGEN',90),fetchFred('RRPONTSYD',90)]);if(!walcl?.length||!tga?.length||!rrp?.length)return null;const lastW=walcl[walcl.length-1];const findN=(s,d,maxD=10)=>{const t=new Date(d).getTime();let best=null,bd=Infinity;for(let i=s.length-1;i>=0;i--){const dd=Math.abs(new Date(s[i].date).getTime()-t)/86400000;if(dd<bd&&dd<=maxD){bd=dd;best=s[i]}if(dd>30)break}return best};const tgaP=findN(tga,lastW.date)||tga[tga.length-1];const rrpP=findN(rrp,lastW.date)||rrp[rrp.length-1];if(!tgaP||!rrpP)return null;const netMil=lastW.val-tgaP.val-(rrpP.val*1000);const netTrn=Math.round(netMil/1e6*100)/100;let chg4w=null;if(walcl.length>=5){const prevW=walcl[walcl.length-5];const pT=findN(tga,prevW.date)||tgaP;const pR=findN(rrp,prevW.date)||rrpP;const prevNet=prevW.val-pT.val-(pR.val*1000);chg4w=Math.round((netMil-prevNet)/1000)}return {net_liq_trn:netTrn,net_liq_chg_4w_bn:chg4w,walcl:lastW.val/1e6,tga:tgaP.val/1e6,rrp:rrpP.val,obsDate:lastW.date,updateType:'Weekly',source:'FRED WALCL−TGA−RRP'}}
 async function fetchM2(){const pts=await fetchFred('M2SL',180);if(!pts?.length)return null;const last=pts[pts.length-1];let chg3m=null;if(pts.length>=13){const prev=pts[pts.length-13];chg3m=Math.round(((last.val-prev.val)/prev.val)*1000)/10}return {val:last.val,chg3m,obsDate:last.date,source:'FRED M2SL',updateType:'Weekly'}}
 async function fetchHYOAS(){const pts=await fetchFred('BAMLH0A0HYM2',60);if(pts?.length){const last=pts[pts.length-1];let chg5=null;if(pts.length>=6)chg5=Math.round((last.val-pts[pts.length-6].val)*100)/100;return {price:Math.round(last.val*100)/100,chg5,obsDate:last.date,source:'FRED BAMLH0A0HYM2',updateType:'Daily'}}const [hyg,ief]=await Promise.all([yahooChart('HYG','1mo','1d'),yahooChart('IEF','1mo','1d')]);if(hyg?.closes?.length>=15&&ief?.closes?.length>=15){const hygRet=(hyg.closes[hyg.closes.length-1]/hyg.closes[0]-1)*100;const iefRet=(ief.closes[ief.closes.length-1]/ief.closes[0]-1)*100;const est=Math.max(2,Math.min(12,3.3+(iefRet-hygRet)*0.5));return {price:Math.round(est*100)/100,chg5:null,source:'HYG/IEF proxy',updateType:'Daily'}}return null}
 async function fetchDelinquency(){const [cre,mort]=await Promise.all([fetchFred('DRCRELEXFACBS',8),fetchFred('DRSFRMACBS',8)]);const out={};if(cre?.length){out.cre=cre[cre.length-1].val;out.creChg=cre.length>=2?cre[cre.length-1].val-cre[cre.length-2].val:null}if(mort?.length){out.mort=mort[mort.length-1].val;out.mortChg=mort.length>=2?mort[mort.length-1].val-mort[mort.length-2].val:null}return Object.keys(out).length?out:null}
 async function fetchSLOOS(){const pts=await fetchFred('DRTSCILM',12);if(!pts?.length)return null;return {val:pts[pts.length-1].val,source:'FRED DRTSCILM (tightening)',updateType:'Quarterly'}}
-async function fetchKRE(){const y=await yahooChart('KRE','3mo','1d');if(!y?.closes?.length)return null;const last=y.closes[y.closes.length-1];const first=y.closes[0];const chg=((last/first)-1)*100;return {price:Math.round(last*100)/100,chg3m:Math.round(chg*10)/10,source:y.source,updateType:'Live'}}
+async function fetchKRE(){
+  return await firstOk([
+    async()=>{const y=await yahooChart('KRE','3mo','1d');if(!y?.closes?.length)return null;const last=y.closes[y.closes.length-1];const first=y.closes[0];return {price:Math.round(last*100)/100,chg3m:Math.round(((last/first)-1)*1000)/10,source:y.source,updateType:'Live'}},
+    async()=>{const s=await stooqDaily('kre.us');if(!s?.closes?.length)return null;const last=s.closes[s.closes.length-1];const first=s.closes[0];return {price:Math.round(last*100)/100,chg3m:Math.round(((last/first)-1)*1000)/10,source:s.source,updateType:'Daily'}}
+  ]);
+}
 async function fetchFX(){let rates=null,provider=null;const providers=[{url:'https://open.er-api.com/v6/latest/USD',name:'er-api'},{url:'https://api.exchangerate-api.com/v4/latest/USD',name:'exchangerate-api'},{url:'https://api.frankfurter.app/latest?from=USD',name:'frankfurter'}];for(const p of providers){try{const r=await fetchWithTimeout(p.url,{cache:'no-store'},5000);const d=await r.json();if(d&&(d.rates||d.conversion_rates)){rates=d.rates||d.conversion_rates;provider=p.name;break}}catch(e){}}if(!rates)return {};const usdjpy=rates.JPY||null;const EURUSD=1/(rates.EUR||0.92),USDJPY=rates.JPY||150,GBPUSD=1/(rates.GBP||0.79),USDCAD=rates.CAD||1.36,USDSEK=rates.SEK||10.5,USDCHF=rates.CHF||0.88;const dxy=Math.round(50.14348112*Math.pow(EURUSD,-0.576)*Math.pow(USDJPY,0.136)*Math.pow(GBPUSD,-0.119)*Math.pow(USDCAD,0.091)*Math.pow(USDSEK,0.042)*Math.pow(USDCHF,0.036)*100)/100;let usdjpy_chg=null,dxy_chg=null;try{const past=new Date();past.setDate(past.getDate()-30);const r=await fetchWithTimeout(`https://api.frankfurter.app/${past.toISOString().slice(0,10)}?from=USD&to=JPY,EUR,GBP,CAD,SEK,CHF`,{cache:'no-store'},5000);const d=await r.json();if(d?.rates){if(d.rates.JPY&&usdjpy)usdjpy_chg=Math.round(((usdjpy-d.rates.JPY)/d.rates.JPY)*1000)/10;const oEUR=1/(d.rates.EUR||0.92),oJPY=d.rates.JPY||150,oGBP=1/(d.rates.GBP||0.79),oCAD=d.rates.CAD||1.36,oSEK=d.rates.SEK||10.5,oCHF=d.rates.CHF||0.88;const oldDxy=50.14348112*Math.pow(oEUR,-0.576)*Math.pow(oJPY,0.136)*Math.pow(oGBP,-0.119)*Math.pow(oCAD,0.091)*Math.pow(oSEK,0.042)*Math.pow(oCHF,0.036);if(oldDxy&&dxy)dxy_chg=Math.round(((dxy-oldDxy)/oldDxy)*1000)/10}}catch(e){}return {usdjpy,usdjpy_chg,dxy,dxy_chg,source:provider}}
 async function fetchCrypto(){const out={funding:false,ethbtc:false,stable:false,fundingRate:null,stableChg7d:null,btc:null,ethbtcRatio:null};try{const r=await fetchWithTimeout('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT',{cache:'no-store'},5000);const d=await r.json();const fr=parseFloat(d.lastFundingRate??d.interestRate);if(!isNaN(fr)){out.fundingRate=fr;if(fr>=0.0005||fr<=-0.0001)out.funding=true}}catch(e){}try{const r=await fetchWithTimeout('https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd&include_24hr_change=true',{cache:'no-store'},5000);const d=await r.json();if(d.ethereum&&d.bitcoin){out.btc=d.bitcoin.usd;if((d.ethereum.usd_24h_change||0)<(d.bitcoin.usd_24h_change||0)-1.5)out.ethbtc=true;if(d.bitcoin.usd)out.ethbtcRatio=d.ethereum.usd/d.bitcoin.usd}}catch(e){}try{const r=await fetchWithTimeout('https://stablecoins.llama.fi/stablecoins?includePrices=true',{cache:'no-store'},6000);const d=await r.json();if(d?.peggedAssets){let now=0,prev=0;d.peggedAssets.forEach(a=>{now+=a.circulating?.peggedUSD||0;const p=a.circulatingPrevWeek?.peggedUSD??a.circulatingPrevDay?.peggedUSD;if(p!=null)prev+=p});if(prev>0){const chg=((now-prev)/prev)*100;out.stableChg7d=Math.round(chg*100)/100;if(chg<-0.8)out.stable=true}}}catch(e){}return out}
 /* ---------- Market breadth: % акций S&P 500 выше своей 50-дневной SMA ----------
@@ -533,16 +601,20 @@ async function fetchSP500List(){
    рабочий расчёт. Теперь считаем по-настоящему: тянем дневные свечи по каждому тикеру
    через v8/finance/chart (этот эндпойнт crumb не требует — им же пользуются fetchVIX,
    fetchCommodities и т.д.) и считаем SMA50 и 52-нед. хай/лоу локально. */
-async function fetchTickerStats(symbol){
-  const y=await yahooChart(symbol,'1y','1d');
-  if(!y?.closes?.length)return null;
-  const c=y.closes.filter(x=>typeof x==='number'&&x>0);
+function statsFromCloses(closes){
+  const c=closes.filter(x=>typeof x==='number'&&x>0);
   if(c.length<55)return null;
   const price=c[c.length-1];
   const sma50=c.slice(-50).reduce((a,b)=>a+b,0)/50;
   const hi52=Math.max(...c);
   const lo52=Math.min(...c);
   return {price,sma50,hi52,lo52};
+}
+async function fetchTickerStats(symbol){
+  return await firstOk([
+    async()=>{const y=await yahooChart(symbol,'1y','1d');return y?.closes?.length?statsFromCloses(y.closes):null},
+    async()=>{const s=await stooqDaily(symbol.toLowerCase()+'.us');return s?.closes?.length?statsFromCloses(s.closes):null}
+  ]);
 }
 async function pooledMap(items,worker,concurrency){
   const results=new Array(items.length);
@@ -598,9 +670,12 @@ async function fetchBreadth(){
     }
   }catch(e){}
   // Резервный вариант (если пофакторный расчёт совсем недоступен): прокси через сам SPY vs его 50/200dma
-  const y=await yahooChart('SPY','1y','1d');
-  if(y?.closes?.length>=200){
-    const c=y.closes.filter(x=>x!=null);
+  const spy=await firstOk([
+    async()=>{const y=await yahooChart('SPY','1y','1d');return y?.closes?.length>=200?y.closes.filter(x=>x!=null):null},
+    async()=>{const s=await stooqDaily('spy.us');return s?.closes?.length>=200?s.closes.filter(x=>x!=null):null}
+  ]);
+  if(spy?.length>=200){
+    const c=spy;
     const last=c[c.length-1];
     const sma200=c.slice(-200).reduce((a,b)=>a+b,0)/200;
     const sma50=c.slice(-50).reduce((a,b)=>a+b,0)/50;
@@ -611,9 +686,27 @@ async function fetchBreadth(){
   }
   return null;
 }
-async function fetchCommodities(){const [gld,tlt,spy,qqq,oil]=await Promise.all([yahooChart('GLD','1mo','1d'),yahooChart('TLT','1mo','1d'),yahooChart('SPY','1mo','1d'),yahooChart('QQQ','1mo','1d'),yahooChart('CL=F','1mo','1d')]);const ret=y=>{if(!y?.closes?.length||y.closes.length<5)return null;return Math.round(((y.closes[y.closes.length-1]/y.closes[0])-1)*1000)/10};return {goldRet:ret(gld),tltRet:ret(tlt),spyRet:ret(spy),qqqRet:ret(qqq),oilRet:ret(oil),spyPrice:spy?.price,qqqPrice:qqq?.price}}
+async function tickerCloses(ySymbol,stooqSymbol){
+  return await firstOk([
+    async()=>{const y=await yahooChart(ySymbol,'1mo','1d');return y?.closes?.length?{closes:y.closes,price:y.price}:null},
+    async()=>{const s=await stooqDaily(stooqSymbol);return s?.closes?.length?{closes:s.closes,price:s.price}:null}
+  ]);
+}
+async function fetchCommodities(){
+  const [gld,tlt,spy,qqq,oil]=await Promise.all([
+    tickerCloses('GLD','gld.us'),tickerCloses('TLT','tlt.us'),tickerCloses('SPY','spy.us'),
+    tickerCloses('QQQ','qqq.us'),tickerCloses('CL=F','cl.f')
+  ]);
+  const ret=y=>{if(!y?.closes?.length||y.closes.length<5)return null;return Math.round(((y.closes[y.closes.length-1]/y.closes[0])-1)*1000)/10};
+  return {goldRet:ret(gld),tltRet:ret(tlt),spyRet:ret(spy),qqqRet:ret(qqq),oilRet:ret(oil),spyPrice:spy?.price,qqqPrice:qqq?.price};
+}
 async function fetchMacro(){const [claims,housing,ism]=await Promise.all([fetchFred('ICSA',30),fetchFred('HOUST',12),fetchFred('MANEMP',12)]);const out={};if(claims?.length){out.claims=claims[claims.length-1].val;out.claimsChg=claims.length>=5?claims[claims.length-1].val-claims[claims.length-5].val:null}if(housing?.length){out.housing=housing[housing.length-1].val;out.housingChg=housing.length>=2?housing[housing.length-1].val-housing[housing.length-2].val:null}if(ism?.length)out.ismProxy=ism[ism.length-1].val;return Object.keys(out).length?out:null}
-async function fetchBaltic(){const y=await yahooChart('BDRY','3mo','1d');if(!y?.closes?.length||y.closes.length<5)return null;const c=y.closes.filter(x=>x!=null);const last=c[c.length-1];const first=c[0];return {price:Math.round(last*100)/100,chg:Math.round(((last/first)-1)*1000)/10,source:y.source}}
+async function fetchBaltic(){
+  const y=await tickerCloses('BDRY','bdry.us');
+  if(!y?.closes?.length||y.closes.length<5)return null;
+  const c=y.closes.filter(x=>x!=null);const last=c[c.length-1];const first=c[0];
+  return {price:Math.round(last*100)/100,chg:Math.round(((last/first)-1)*1000)/10,source:'BDRY (Yahoo/Stooq)'};
+}
 
 /* ---------- v2.2 additions: CCC/BBB OAS, global CB balance sheets, put/call & highs-lows (прямые данные, без CNN), VIX term structure, extra macro, RSP/IWM narrowness ---------- */
 async function fetchCCCOAS(){const pts=await fetchFred('BAMLH0A3HYC',60);if(!pts?.length)return null;const last=pts[pts.length-1];let chg5=null;if(pts.length>=6)chg5=Math.round((last.val-pts[pts.length-6].val)*100)/100;return {price:Math.round(last.val*100)/100,chg5,obsDate:last.date,source:'FRED BAMLH0A3HYC (CCC OAS)',updateType:'Daily'}}
@@ -675,10 +768,13 @@ async function fetchPutCallRatio(){
   return null;
 }
 async function fetchVixTerm(){
-  const [front,term]=await Promise.all([yahooChart('^VIX','1d','1m'),yahooChart('^VIX3M','5d','1d')]);
-  if(!front?.price||!term?.price)return null;
-  const ratio=Math.round((front.price/term.price)*1000)/1000; // >1 = backwardation (stress), <1 = contango (normal)
-  return {front:front.price,term:term.price,ratio,source:'Yahoo ^VIX/^VIX3M'};
+  const [front,term]=await Promise.all([
+    firstOk([async()=>{const y=await yahooChart('^VIX','1d','1m');return y?.price||null},async()=>{const s=await stooqDaily('^vix');return s?.price||null}]),
+    firstOk([async()=>{const y=await yahooChart('^VIX3M','5d','1d');return y?.price||null},async()=>{const s=await stooqDaily('^vix3m');return s?.price||null}])
+  ]);
+  if(!front||!term)return null;
+  const ratio=Math.round((front/term)*1000)/1000; // >1 = backwardation (stress), <1 = contango (normal)
+  return {front,term,ratio,source:'VIX/VIX3M (Yahoo/Stooq)'};
 }
 async function fetchMacroExtra(){
   const [permit,durable,temp]=await Promise.all([fetchFred('PERMIT',60),fetchFred('DGORDER',400),fetchFred('TEMPHELPS',400)]);
@@ -689,15 +785,15 @@ async function fetchMacroExtra(){
   return Object.keys(out).length?out:null;
 }
 async function fetchNarrowness(){
-  const [rsp,iwm]=await Promise.all([yahooChart('RSP','3mo','1d'),yahooChart('IWM','3mo','1d')]);
+  const [rsp,iwm]=await Promise.all([tickerCloses('RSP','rsp.us'),tickerCloses('IWM','iwm.us')]);
   const ret=y=>{if(!y?.closes?.length||y.closes.length<5)return null;return Math.round(((y.closes[y.closes.length-1]/y.closes[0])-1)*1000)/10};
   const out={rspRet:ret(rsp),iwmRet:ret(iwm)};
   return (out.rspRet!=null||out.iwmRet!=null)?out:null;
 }
-async function fetchCopper(){const y=await yahooChart('HG=F','3mo','1d');if(!y?.closes?.length||y.closes.length<5)return null;const chg=((y.closes[y.closes.length-1]/y.closes[0])-1)*100;return {price:y.price,chg3m:Math.round(chg*10)/10,source:y.source}}
+async function fetchCopper(){const y=await tickerCloses('HG=F','hg.f');if(!y?.closes?.length||y.closes.length<5)return null;const chg=((y.closes[y.closes.length-1]/y.closes[0])-1)*100;return {price:y.price,chg3m:Math.round(chg*10)/10,source:'HG=F (Yahoo/Stooq)'}}
 
 /* ---------- Copper/Gold Ratio ---------- */
-async function fetchGold(){const y=await yahooChart('GC=F','3mo','1d');if(!y?.closes?.length||y.closes.length<5)return null;const chg=((y.closes[y.closes.length-1]/y.closes[0])-1)*100;return {price:y.price,chg3m:Math.round(chg*10)/10,source:y.source}}
+async function fetchGold(){const y=await tickerCloses('GC=F','gc.f');if(!y?.closes?.length||y.closes.length<5)return null;const chg=((y.closes[y.closes.length-1]/y.closes[0])-1)*100;return {price:y.price,chg3m:Math.round(chg*10)/10,source:'GC=F (Yahoo/Stooq)'}}
 function computeCopperGoldRatio(copper,gold,commod){
   if(!copper?.price||!gold?.price)return null;
   // Ratio = Copper Futures ($/lb) / Gold Futures ($/oz) * 1000 для читаемости
@@ -1706,7 +1802,11 @@ document.getElementById('refreshBtn').addEventListener('click',fetchOpenSources)
 
 (function(){const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;if(!isStandalone)document.getElementById('pwaHint').classList.add('show')})();
 
-const BASE_REFRESH_MS=6*60*1000, MAX_REFRESH_MS=18*60*1000;
+// v2.8: было 6/18 мин — при такой частоте никакой бесплатный лимит (Yahoo-бан по IP,
+// Twelve Data 800/сутки, Finnhub 300/сутки) не выдерживает. 3 часа базово, до 6 часов при
+// повторных сбоях — для кризис-мониторинга такой гранулярности более чем достаточно, а
+// суммарная нагрузка на источники падает в ~30 раз.
+const BASE_REFRESH_MS=3*60*60*1000, MAX_REFRESH_MS=6*60*60*1000;
 let consecutiveFails=0, autoRefreshTimer=null;
 function nextDelay(){return Math.min(MAX_REFRESH_MS,BASE_REFRESH_MS*Math.pow(1.5,Math.min(consecutiveFails,3)))+Math.random()*40000}
 function scheduleNextRefresh(){if(autoRefreshTimer)clearTimeout(autoRefreshTimer);const delay=nextDelay();nextRefreshAt=Date.now()+delay;autoRefreshTimer=setTimeout(()=>fetchOpenSources(),delay);renderHeartbeat()}
