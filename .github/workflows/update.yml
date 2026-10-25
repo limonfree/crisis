@@ -18,5 +18,5 @@ jobs:
       - run: |
           git config user.name "data-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data.json
+          git add data/latest.json data/history.json
           git diff --cached --quiet || (git commit -m "data update" && git push)
