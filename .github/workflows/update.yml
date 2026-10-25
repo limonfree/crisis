@@ -14,7 +14,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install yfinance pandas
-      - name: Diagnose FRED connection
       - run: |
           for i in 1 2 3; do
             echo "Test $i"
