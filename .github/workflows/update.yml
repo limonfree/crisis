@@ -14,18 +14,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install yfinance pandas
-      - run: |
-          for i in 1 2 3; do
-            echo "Test $i"
-            curl -v -L \
-              --connect-timeout 10 \
-              --max-time 25 \
-              -o /tmp/fred.csv \
-              -w 'HTTP %{http_code}, time %{time_total}s\n' \
-              'https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL' \
-              && head -n 3 /tmp/fred.csv && break
-          sleep 5 
-          done
       - run: python collect.py
       - run: |
           git config user.name "data-bot"
