@@ -1,3 +1,4 @@
+
 name: update-data
 
 on:
@@ -15,36 +16,77 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Generate crisis data
+      - name: Validate Python and tests
+        run: |
+          python -m compileall -q engine.py collect.py v4.py evaluate.py
+
+          if [ -d tests ]; then
+            python -m unittest discover -s tests -v
+          else
+            echo "WARNING: tests directory not found"
+          fi
+
+      - name: Collect economic data
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: python -u collect.py
-
-      - name: Validate output
         run: |
-          test -s data/latest.json
-          test -s data/history.json
-          python -m json.tool data/latest.json >/dev/null
-          python -m json.tool data/history.json >/dev/null
+          python -u collect.py
 
-      - name: Commit data
+      - name: Validate generated JSON
+        run: |
+          for f in \
+            data/latest.json \
+            data/history.json \
+            data/signal_log.json \
+            data/evaluation.json
+          do
+            test -s "$f"
+            python -m json.tool "$f" > /dev/null
+          done
+
+          python - <<'PY'
+          import json
+
+          with open("data/latest.json") as f:
+              latest = json.load(f)
+
+          assert latest["schema"] == 4, "Wrong schema"
+          assert latest["valid"], "Invalid economic data"
+          assert len(latest["diagnostics"]["models"]) == 4
+
+          with open("data/signal_log.json") as f:
+              signals = json.load(f)
+
+          assert signals["n_total"] >= 1
+
+          print("Crisis Engine v4 validation passed")
+          PY
+
+      - name: Commit data and archives
         run: |
           git config user.name "data-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/latest.json data/history.json data/source_cache.json
+
+          git add -A data
+
           if ! git diff --cached --quiet; then
-            git commit -m "data update"
+            git commit -m "Crisis Engine v4 data update"
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "No data changes"
           fi
