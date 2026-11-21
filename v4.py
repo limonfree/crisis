@@ -156,7 +156,7 @@ def build_snapshot(latest,raw,errors):
     return {'schema':1,'captured_at':capture,'asof':str(day),
             'model_version':VERSION,'model_code_sha256':code_hash(),
             'score_v3_reference':(latest.get('score') or {}).get('value'),
-            'models':latest['diagnostics']['models'], 'prices':prices_at_capture(raw,day),
+            'models':latest['diagnostics']['models'], 'crypto_early_warning':latest.get('crypto_early_warning'), 'prices':prices_at_capture(raw,day),
             'sources':{'status':{'ok':sorted(k for k in raw if k not in errors),
                                  'fallback_or_error':errors},
                        'indicators':[{k:x.get(k) for k in ('id','obs','pub','status','disp','stress','pctl','src','series')}

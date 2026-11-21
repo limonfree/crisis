@@ -4,6 +4,7 @@ import json, os, sys, time, csv, io, math, random, urllib.request, urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import engine as eng
 import v4
+import early_warning
 import datetime as dt
 import freshness
 from engine import *  # noqa
@@ -294,6 +295,7 @@ def run(raw, err, live, today):
                    note='Исторические ряды пересчитаны сегодня по пересмотренным значениям; календарь публикаций приближённый. НЕ является честным историческим бэктестом.')
     # v4 diagnostics are independent of portfolio allocations and the aggregate score.
     latest['diagnostics'] = v4.diagnose(data, rs, latest, today)
+    latest['crypto_early_warning'] = early_warning.compute(latest)
     latest['schema'] = 4
     latest['model_version'] = v4.VERSION
     latest['invest'] = None  # Disabled: unvalidated allocation levels from v3.
